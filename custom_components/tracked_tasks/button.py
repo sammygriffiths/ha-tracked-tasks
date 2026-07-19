@@ -29,11 +29,10 @@ async def async_setup_entry(
 class TrackedTaskMarkDoneButton(TrackedTaskEntity, ButtonEntity):
     """Button that marks a tracked task done."""
 
-    _attr_name = "Mark done"
     _attr_icon = "mdi:check-circle-outline"
 
     def __init__(self, task: TrackedTask, manager: TrackedTaskManager) -> None:
-        super().__init__(task, Platform.BUTTON.value, "mark_done")
+        super().__init__(task, Platform.BUTTON.value, "mark_done", "Mark done")
         self._manager = manager
 
     async def async_press(self) -> None:

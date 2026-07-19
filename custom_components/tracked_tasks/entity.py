@@ -13,14 +13,20 @@ from .models import TrackedTask
 class TrackedTaskEntity(Entity):
     """Base entity for entities belonging to a tracked task device."""
 
-    _attr_has_entity_name = True
+    _attr_has_entity_name = False
 
-    def __init__(self, task: TrackedTask, platform: str, entity_key: str) -> None:
+    def __init__(
+        self,
+        task: TrackedTask,
+        platform: str,
+        entity_key: str,
+        entity_name: str,
+    ) -> None:
         self.task = task
-        self._attr_unique_id = f"{task.config.task_id}_{entity_key}"
-        object_id = f"{slugify(task.config.task_id)}_{entity_key}"
-        self._attr_suggested_object_id = object_id
-        self.entity_id = f"{platform}.{object_id}"
+        object_id = f"{task.config.task_id}_{entity_key}"
+        self._attr_unique_id = object_id
+        self._attr_name = entity_name
+        self._attr_has_entity_name = True
 
     @property
     def device_info(self) -> DeviceInfo:

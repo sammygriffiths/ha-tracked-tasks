@@ -14,7 +14,7 @@ custom_components/tracked_tasks/
 
 Then restart Home Assistant after adding your YAML configuration.
 
-This version reports `0.1.1` in `manifest.json`.
+This version reports `0.1.2` in `manifest.json`.
 
 ## Configuration
 

@@ -39,8 +39,14 @@ async def async_setup_entry(
 class TrackedTaskSensorEntity(TrackedTaskEntity, SensorEntity):
     """Base class for tracked task sensors."""
 
-    def __init__(self, task: TrackedTask, manager: TrackedTaskManager, entity_key: str) -> None:
-        super().__init__(task, Platform.SENSOR.value, entity_key)
+    def __init__(
+        self,
+        task: TrackedTask,
+        manager: TrackedTaskManager,
+        entity_key: str,
+        entity_name: str,
+    ) -> None:
+        super().__init__(task, Platform.SENSOR.value, entity_key, entity_name)
         self._manager = manager
         self._remove_listener: Callable[[], None] | None = None
 
@@ -65,11 +71,10 @@ class TrackedTaskSensorEntity(TrackedTaskEntity, SensorEntity):
 class TrackedTaskStatusSensor(TrackedTaskSensorEntity):
     """Expose the simple status for a tracked task."""
 
-    _attr_name = "Status"
     _attr_icon = "mdi:checkbox-marked-circle-outline"
 
     def __init__(self, task: TrackedTask, manager: TrackedTaskManager) -> None:
-        super().__init__(task, manager, "status")
+        super().__init__(task, manager, "status", "Status")
 
     @property
     def native_value(self) -> str:
@@ -80,12 +85,11 @@ class TrackedTaskStatusSensor(TrackedTaskSensorEntity):
 class TrackedTaskLastCompletedSensor(TrackedTaskSensorEntity):
     """Expose the last completion timestamp for a tracked task."""
 
-    _attr_name = "Last completed"
     _attr_device_class = SensorDeviceClass.TIMESTAMP
     _attr_icon = "mdi:calendar-check"
 
     def __init__(self, task: TrackedTask, manager: TrackedTaskManager) -> None:
-        super().__init__(task, manager, "last_completed")
+        super().__init__(task, manager, "last_completed", "Last completed")
 
     @property
     def native_value(self) -> datetime | None:
