@@ -6,23 +6,23 @@ from collections.abc import Callable
 from datetime import datetime
 
 from homeassistant.components.sensor import SensorDeviceClass, SensorEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .const import DOMAIN
 from .entity import TrackedTaskEntity
 from .models import TrackedTask, TrackedTaskManager
 
 
-async def async_setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
+    entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
-    """Set up tracked task sensors from YAML config."""
-    manager: TrackedTaskManager = hass.data[DOMAIN]
+    """Set up tracked task sensors from a config entry."""
+    manager: TrackedTaskManager = hass.data[DOMAIN][entry.entry_id]
     entities: list[SensorEntity] = []
 
     for task in manager.tasks.values():
@@ -40,7 +40,7 @@ class TrackedTaskSensorEntity(TrackedTaskEntity, SensorEntity):
     """Base class for tracked task sensors."""
 
     def __init__(self, task: TrackedTask, manager: TrackedTaskManager, entity_key: str) -> None:
-        super().__init__(task, entity_key)
+        super().__init__(task, Platform.SENSOR.value, entity_key)
         self._manager = manager
         self._remove_listener: Callable[[], None] | None = None
 

@@ -4,13 +4,13 @@
 
 Build a custom Home Assistant integration called `tracked_tasks`.
 
-The integration models household obligations as first-class Home Assistant devices/entities. The user wants to define a task once, then have Home Assistant expose related entities such as status, due state, overdue state, next due time, last completed time, time remaining, and a dashboard button to mark the task done.
+The integration models household obligations as first-class Home Assistant **devices with related entities**. The user wants to define a task once, then have Home Assistant expose related entities such as status, due state, overdue state, next due time, last completed time, time remaining, and a dashboard button to mark the task done.
 
 The core design principle is:
 
-> NFC tags, Zigbee buttons, dashboard buttons, Todoist, and other triggers are only inputs. They should all call the same integration service/action to mark a task complete.
+> A task is the object. In Home Assistant terms, each task should be a logical device. The task's properties are entities, and the task's actions are button entities or entity-targeted services.
 
-Do not build task logic directly into NFC automations. The task object/integration should own task state and due/overdue calculations.
+Do not build task logic directly into NFC automations. NFC tags, Zigbee buttons, dashboard buttons, Todoist, and other triggers are only inputs. They should all mark the same task complete by pressing/targeting the task's `button.<task>_mark_done` entity, or by using an entity-targeted integration action that delegates to the same code path.
 
 ## User context
 
@@ -24,11 +24,47 @@ They use Home Assistant, Zigbee2MQTT, NFC tags, dashboard cards, and may later w
 - Friendly name: `Tracked Tasks`
 - Main folder: `custom_components/tracked_tasks/`
 
-## Non-goals for the first version
+## Important architectural correction after Stages 1-3
+
+Stages 1-3 may already have implemented a procedural service like this:
+
+```yaml
+service: tracked_tasks.mark_done
+data:
+  task_id: bins
+```
+
+That should no longer be the primary user-facing API.
+
+The preferred, Home Assistant-native model is:
+
+```yaml
+service: button.press
+target:
+  entity_id: button.bins_mark_done
+```
+
+That `button.<task>_mark_done` entity is the canonical “method” for completing the task. It should update the same shared task state used by all other entities for that task.
+
+It is acceptable to keep a `tracked_tasks.mark_done` service as a backwards-compatible convenience, but it should either:
+
+1. Support `target.entity_id` and operate on one or more `button.<task>_mark_done` entities, or
+2. Be clearly marked as legacy/deprecated if it still accepts `task_id`.
+
+Do not build a pseudo-OOP service namespace such as `bins.mark_done` or `tracked_tasks.bins_mark_done`. That is not idiomatic Home Assistant. The idiomatic Home Assistant object model is:
+
+```text
+Task object       -> Home Assistant device
+Task properties   -> sensors / binary sensors
+Task methods      -> button entities or entity-targeted services
+Task events       -> state changes / automation triggers
+```
+
+## Non-goals for the current change request
 
 Do not build everything at once.
 
-Avoid these in the initial implementation unless explicitly requested later:
+Avoid these unless explicitly requested later:
 
 - Todoist sync
 - External APIs
@@ -39,8 +75,8 @@ Avoid these in the initial implementation unless explicitly requested later:
 - Complex frontend cards
 - Full iCalendar/RRULE support
 - Mobile app-specific notification logic
-
-The first goal is a reliable native-feeling Home Assistant integration with task entities and a `mark_done` action/service.
+- Full persistence, unless it already exists and only needs preserving
+- Full recurrence/due/overdue logic, unless explicitly part of the current stage
 
 ## Preferred staged delivery
 
@@ -79,7 +115,7 @@ tracked_tasks:
 
 The integration should create one Home Assistant device per task.
 
-### Stage 2 — Basic entities and mark-done action
+### Stage 2 — Basic task entities
 
 For each task, expose:
 
@@ -87,17 +123,63 @@ For each task, expose:
 - `sensor.<task>_last_completed`
 - `button.<task>_mark_done`
 
-Register an action/service:
+Each task should appear as one device in Home Assistant, and these entities should be grouped under that device.
+
+### Stage 3 — Primary completion path through button entities
+
+Goal: All completion inputs can update task state through the same button/entity mechanism.
+
+Canonical completion path:
 
 ```yaml
-service: tracked_tasks.mark_done
-data:
-  task_id: bins
+service: button.press
+target:
+  entity_id: button.bins_mark_done
 ```
 
-The service/action and the button must update the same underlying task state.
+The button must update the shared underlying task state. Any convenience service/action must delegate to the same shared code path.
 
-### Stage 3 — Due and overdue state
+Acceptance criteria:
+
+- Pressing `button.<task>_mark_done` updates `last_completed`.
+- NFC automations can call `button.press` with the task button entity.
+- Zigbee automations can call `button.press` with the task button entity.
+- Sensors update without restarting Home Assistant.
+- If `tracked_tasks.mark_done` remains, it is secondary and either supports `target.entity_id` or is documented as legacy.
+
+### Stage 4 — Schedule calculation
+
+Goal: Move schedule/status logic into pure Python code.
+
+Add:
+
+- `models.py`
+- `schedule.py`
+
+Support first:
+
+- daily
+- weekly
+
+Then add:
+
+- monthly
+- interval days
+- one-off
+
+Acceptance criteria:
+
+- Schedule logic is unit-testable outside Home Assistant.
+- Given `now`, task config, and task state, code can calculate:
+  - status
+  - next due
+  - overdue boolean
+  - due boolean
+  - time remaining
+
+### Stage 5 — Due/overdue/next due entities
+
+Goal: Expose derived task state to Home Assistant.
 
 Add:
 
@@ -106,75 +188,53 @@ Add:
 - `sensor.<task>_next_due`
 - `sensor.<task>_time_remaining`
 
-The integration should calculate task status from the schedule and completion state.
+Acceptance criteria:
 
-Initial status values:
+- Automations can trigger when `binary_sensor.<task>_overdue` turns on.
+- Dashboard can show countdown/next due/last completed.
+- States refresh as time passes, not only when mark_done is called.
 
-- `pending` — not currently due yet
-- `due` — currently in the due window but not yet overdue
-- `overdue` — deadline has passed without completion
-- `done` — current obligation has been completed
-- `disabled` — optional later state, not required in v1
+### Stage 6 — Persistence
 
-### Stage 4 — Persistence
+Goal: Completion state survives Home Assistant restarts.
 
-Persist task completion state across Home Assistant restarts.
+Tasks:
 
-At minimum, persist:
+- Persist task state using Home Assistant-native storage.
+- Restore state on setup.
+- Handle missing/corrupt stored state gracefully.
 
-- `last_completed`
-- current/last completed obligation identifier or due timestamp, if needed
+Acceptance criteria:
 
-Use Home Assistant-native storage patterns where appropriate. Avoid using helpers such as `input_datetime` as the integration’s internal source of truth.
+- Mark task done.
+- Restart Home Assistant.
+- `last_completed` remains correct.
+- Status remains correct after restart.
 
-### Stage 5 — Recurrence support
+### Stage 7 — Documentation and example automations
 
-Support these schedule types first:
+Goal: The user can install, configure, and use the integration.
 
-#### Daily
+Add/update:
 
-```yaml
-schedule:
-  type: daily
-  due_time: "09:00"
-```
+- `README.md`
+- example YAML config
+- example NFC automation using `button.press`
+- example Zigbee button automation using `button.press`
+- example overdue notification automation
+- known limitations
 
-#### Weekly
+### Stage 8 — Optional future polish
 
-```yaml
-schedule:
-  type: weekly
-  weekday: thursday
-  due_time: "09:00"
-```
+Only after the above works:
 
-#### Monthly by day of month
-
-```yaml
-schedule:
-  type: monthly
-  day: 1
-  due_time: "18:00"
-```
-
-#### Interval days
-
-```yaml
-schedule:
-  type: interval_days
-  every: 30
-  due_time: "18:00"
-```
-
-#### One-off
-
-```yaml
-schedule:
-  type: one_off
-  due_at: "2027-01-17T18:00:00"
-```
-
-Do not over-engineer recurrence in v1. Add clean tests around each supported schedule type.
+- Config flow UI
+- Options flow UI
+- enable/disable task switch
+- skip occurrence service/action
+- Todoist sync
+- HACS compatibility
+- brand images
 
 ## Task model
 
@@ -228,123 +288,30 @@ Each entity should expose `device_info` with identifiers based on `(DOMAIN, task
 
 ## Service/action requirements
 
-Register at least this action/service:
+The preferred completion action is:
 
 ```yaml
-tracked_tasks.mark_done:
-  task_id: string
+service: button.press
+target:
+  entity_id: button.bins_mark_done
 ```
+
+Optional convenience service/action:
+
+```yaml
+service: tracked_tasks.mark_done
+target:
+  entity_id: button.bins_mark_done
+```
+
+Avoid making `task_id` the primary public API. If `task_id` is retained for backwards compatibility, document it as legacy or compatibility-only.
 
 Optional later services/actions:
 
 ```yaml
-tracked_tasks.reset_task:
-  task_id: string
-
-tracked_tasks.skip_current:
-  task_id: string
-
-tracked_tasks.set_enabled:
-  task_id: string
-  enabled: boolean
+tracked_tasks.skip_occurrence
+tracked_tasks.reset_task
+tracked_tasks.set_enabled
 ```
 
-Do not add optional services until the core model is stable.
-
-## Dashboard expectations
-
-The integration should support a simple Lovelace dashboard using native entity cards or Mushroom-style cards.
-
-The user should be able to show:
-
-- task status
-- time remaining
-- next due
-- last completed
-- overdue state
-- mark done button
-
-No custom frontend card is required.
-
-## Automation examples that should work
-
-### NFC tag marks task done
-
-```yaml
-alias: Mark bins done from NFC
-trigger:
-  - platform: tag
-    tag_id: YOUR_TAG_ID
-action:
-  - service: tracked_tasks.mark_done
-    data:
-      task_id: bins
-```
-
-### Zigbee button marks task done
-
-```yaml
-alias: Mark bins done from button
-trigger:
-  - platform: state
-    entity_id: sensor.bins_button_action
-    to: "single"
-action:
-  - service: tracked_tasks.mark_done
-    data:
-      task_id: bins
-```
-
-### Notify when overdue
-
-```yaml
-alias: Notify when bins overdue
-trigger:
-  - platform: state
-    entity_id: binary_sensor.bins_overdue
-    to: "on"
-action:
-  - service: notify.mobile_app_your_phone
-    data:
-      message: "Bins have not been done yet."
-```
-
-## Testing expectations
-
-Add tests where practical, especially for pure schedule/status logic.
-
-At minimum, separate recurrence/status calculation into pure Python functions/classes so they can be unit tested without a running Home Assistant instance.
-
-Prioritise tests for:
-
-- daily due/overdue
-- weekly due/overdue
-- monthly due/overdue
-- one-off due/overdue
-- completion before due time
-- completion after overdue time
-- persisted state restoration
-
-## Code style expectations
-
-- Use modern Python with type hints.
-- Prefer clear domain objects/dataclasses for task config/state.
-- Keep Home Assistant platform glue thin.
-- Keep schedule/status calculation in testable pure Python modules.
-- Avoid blocking I/O in async Home Assistant code.
-- Use Home Assistant-native APIs and patterns.
-- Keep the initial implementation understandable for someone new to custom integrations.
-
-## Documentation expectations
-
-Update or create Markdown docs explaining:
-
-- installation
-- YAML configuration
-- available entities
-- available services/actions
-- example automations
-- known limitations
-- staged roadmap
-
-Do not leave the project without usable README-style guidance.
+Prefer entity-targeted services/actions for these too, rather than raw `task_id` data fields.

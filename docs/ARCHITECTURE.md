@@ -4,7 +4,7 @@
 
 `tracked_tasks` is a custom Home Assistant integration for modelling household tasks as native Home Assistant devices/entities.
 
-The central concept is a scheduled task/obligation. Each task owns its own state and derived status. Inputs such as NFC tags, Zigbee buttons, dashboard buttons, Todoist completions, or voice commands should not implement task-specific timing logic. They should call the same integration action/service to mark a task complete.
+The central concept is a scheduled task/obligation. Each task owns its own state and derived status. Inputs such as NFC tags, Zigbee buttons, dashboard buttons, Todoist completions, or voice commands should not implement task-specific timing logic. They should complete the task by targeting the task's `button.<task>_mark_done` entity.
 
 ## Core design
 
@@ -12,7 +12,7 @@ The central concept is a scheduled task/obligation. Each task owns its own state
 Input trigger
   NFC tag / Zigbee button / dashboard button / Todoist / voice
         ↓
-tracked_tasks.mark_done(task_id)
+button.press target: button.<task>_mark_done
         ↓
 Tracked task state updates
         ↓
@@ -20,6 +20,20 @@ Entities update
   status / due / overdue / next_due / time_remaining / last_completed
         ↓
 Normal Home Assistant automations react to entity state
+```
+
+This replaces the earlier procedural-first design:
+
+```text
+tracked_tasks.mark_done(task_id)
+```
+
+A `tracked_tasks.mark_done` service may still exist as a compatibility/convenience API, but it should not be the primary path shown in examples. If kept, prefer an entity-targeted shape:
+
+```yaml
+service: tracked_tasks.mark_done
+target:
+  entity_id: button.bins_mark_done
 ```
 
 ## Why this exists
@@ -34,6 +48,38 @@ This avoids scattering each task across:
 
 Instead, each task is defined once and exposed as a group of related entities under one Home Assistant device.
 
+## Home Assistant object model mapping
+
+```text
+OOP task object    -> Home Assistant device
+Object fields      -> sensors / binary sensors
+Object methods     -> button entities or entity-targeted services
+Object events      -> entity state changes
+```
+
+For example:
+
+```text
+Device: Bins
+  sensor.bins_status
+  sensor.bins_last_completed
+  sensor.bins_next_due
+  sensor.bins_time_remaining
+  binary_sensor.bins_due
+  binary_sensor.bins_overdue
+  button.bins_mark_done
+```
+
+Do not try to create pseudo-device namespaces such as:
+
+```text
+bins.status
+bins.mark_done
+tracked_tasks.bins_mark_done
+```
+
+That fights Home Assistant's domain/entity model. The idiomatic model is a device with entities under standard domains such as `sensor`, `binary_sensor`, and `button`.
+
 ## Integration domain
 
 ```text
@@ -47,6 +93,7 @@ custom_components/tracked_tasks/
   __init__.py
   manifest.json
   const.py
+  coordinator.py          # optional, if useful
   models.py
   schedule.py
   storage.py
@@ -57,7 +104,7 @@ custom_components/tracked_tasks/
   strings.json
 ```
 
-Not all files are required in the very first implementation, but schedule/status logic should be split out early so it can be tested independently.
+Not all files are required immediately, but schedule/status logic should be split out early so it can be tested independently.
 
 ## Data model
 
@@ -192,11 +239,31 @@ All entities should share device info using identifiers like:
 ("tracked_tasks", task_id)
 ```
 
-## Services/actions
+## Completion API
 
-### mark_done
+### Primary path: button entity
 
 Marks the current task obligation as complete.
+
+```yaml
+service: button.press
+target:
+  entity_id: button.bins_mark_done
+```
+
+This is the main user-facing API used by NFC tags, Zigbee buttons, dashboard controls, and future sync integrations.
+
+### Optional compatibility path: integration service
+
+If the integration keeps a custom service/action, prefer an entity-targeted version:
+
+```yaml
+service: tracked_tasks.mark_done
+target:
+  entity_id: button.bins_mark_done
+```
+
+Avoid making this the canonical documentation path:
 
 ```yaml
 service: tracked_tasks.mark_done
@@ -204,13 +271,13 @@ data:
   task_id: bins
 ```
 
-This is the main integration API used by NFC tags, buttons, dashboard controls, and future sync integrations.
+It may be retained for compatibility with older automations, but should be documented as legacy.
 
 ## Persistence
 
 The integration should not rely on Home Assistant helper entities as its internal state store.
 
-Persist task completion state using Home Assistant-native storage. In early development, in-memory state is acceptable only for Stage 1/2 proof of concept.
+Persist task completion state using Home Assistant-native storage. In early development, in-memory state is acceptable only for Stage 1-3 proof of concept.
 
 Persist at least:
 

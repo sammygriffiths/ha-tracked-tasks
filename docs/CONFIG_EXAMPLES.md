@@ -39,9 +39,11 @@ tracked_tasks:
         due_at: "2027-01-17T18:00:00"
 ```
 
-## Expected entities
+## Expected device/entities
 
-For `bins`, expect entities like:
+For `bins`, expect a Home Assistant device called something like `Bins`.
+
+Entities on that device should include:
 
 ```text
 sensor.bins_status
@@ -53,7 +55,9 @@ binary_sensor.bins_overdue
 button.bins_mark_done
 ```
 
-## NFC tag automation
+## Preferred NFC tag automation
+
+Completion should target the task's button entity.
 
 ```yaml
 alias: Mark bins done from NFC
@@ -61,12 +65,12 @@ trigger:
   - platform: tag
     tag_id: YOUR_TAG_ID
 action:
-  - service: tracked_tasks.mark_done
-    data:
-      task_id: bins
+  - service: button.press
+    target:
+      entity_id: button.bins_mark_done
 ```
 
-## Zigbee button automation
+## Preferred Zigbee button automation
 
 ```yaml
 alias: Mark bins done from button
@@ -75,10 +79,35 @@ trigger:
     entity_id: sensor.bins_button_action
     to: "single"
 action:
-  - service: tracked_tasks.mark_done
-    data:
-      task_id: bins
+  - service: button.press
+    target:
+      entity_id: button.bins_mark_done
 ```
+
+## Optional compatibility service/action
+
+If the integration keeps `tracked_tasks.mark_done`, prefer entity targeting:
+
+```yaml
+alias: Mark bins done through tracked_tasks compatibility action
+trigger:
+  - platform: tag
+    tag_id: YOUR_TAG_ID
+action:
+  - service: tracked_tasks.mark_done
+    target:
+      entity_id: button.bins_mark_done
+```
+
+Avoid documenting this as the main path:
+
+```yaml
+service: tracked_tasks.mark_done
+data:
+  task_id: bins
+```
+
+That shape can remain for backwards compatibility only, if it already exists.
 
 ## Dashboard button
 

@@ -3,23 +3,23 @@
 from __future__ import annotations
 
 from homeassistant.components.button import ButtonEntity
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 
 from .const import DOMAIN
 from .entity import TrackedTaskEntity
 from .models import TrackedTask, TrackedTaskManager
 
 
-async def async_setup_platform(
+async def async_setup_entry(
     hass: HomeAssistant,
-    config: ConfigType,
+    entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
-    discovery_info: DiscoveryInfoType | None = None,
 ) -> None:
-    """Set up tracked task buttons from YAML config."""
-    manager: TrackedTaskManager = hass.data[DOMAIN]
+    """Set up tracked task buttons from a config entry."""
+    manager: TrackedTaskManager = hass.data[DOMAIN][entry.entry_id]
     async_add_entities(
         TrackedTaskMarkDoneButton(task, manager)
         for task in manager.tasks.values()
@@ -33,7 +33,7 @@ class TrackedTaskMarkDoneButton(TrackedTaskEntity, ButtonEntity):
     _attr_icon = "mdi:check-circle-outline"
 
     def __init__(self, task: TrackedTask, manager: TrackedTaskManager) -> None:
-        super().__init__(task, "mark_done")
+        super().__init__(task, Platform.BUTTON.value, "mark_done")
         self._manager = manager
 
     async def async_press(self) -> None:

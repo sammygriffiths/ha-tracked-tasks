@@ -1,13 +1,18 @@
 {
   "title": "Tracked Tasks",
+  "config": {
+    "abort": {
+      "yaml_only": "Tracked Tasks is currently configured in configuration.yaml."
+    }
+  },
   "services": {
     "mark_done": {
       "name": "Mark done",
-      "description": "Mark a tracked task as completed.",
+      "description": "Compatibility action for marking a tracked task as completed. Prefer button.press targeting button.<task>_mark_done.",
       "fields": {
         "task_id": {
-          "name": "Task ID",
-          "description": "The YAML task identifier to mark as completed."
+          "name": "Task ID (legacy)",
+          "description": "Legacy YAML task identifier to mark as completed. Prefer targeting the task's mark-done button entity."
         }
       }
     }

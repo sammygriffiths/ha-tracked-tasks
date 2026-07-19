@@ -6,58 +6,45 @@ Build in small, working stages. Do not start by building config flow, Todoist sy
 
 Each stage should be testable in Home Assistant before continuing.
 
-## Stage 1 — Skeleton
+## Current state assumption
 
-Goal: Home Assistant loads the custom integration without errors.
+Stages 1-3 have already been implemented once. The next task is a small architectural correction before continuing to due/overdue/persistence work.
+
+The correction is: make the task's button entity the primary completion mechanism, instead of requiring users to call `tracked_tasks.mark_done` with a raw `task_id`.
+
+## Stage 3A — Refactor completion API around task button entities
+
+Goal: Preserve existing Stage 1-3 behaviour, but make the Home Assistant-native button entity the canonical completion path.
+
+Preferred completion automation:
+
+```yaml
+service: button.press
+target:
+  entity_id: button.bins_mark_done
+```
 
 Tasks:
 
-1. Create `custom_components/tracked_tasks/`.
-2. Add `manifest.json`.
-3. Add `const.py`.
-4. Add `__init__.py` with YAML config parsing.
-5. Validate a minimal `tracked_tasks:` YAML block.
-6. Log loaded tasks at startup.
+1. Identify the existing shared mark-done/update-state code path.
+2. Ensure `button.<task>_mark_done` calls that shared code path.
+3. Update examples/docs so NFC and Zigbee automations use `button.press` targeting the button entity.
+4. Review the existing `tracked_tasks.mark_done` service:
+   - If kept, make it secondary.
+   - Prefer adding support for `target.entity_id` if feasible.
+   - If `task_id` remains, keep it for backwards compatibility and document it as legacy/compatibility-only.
+5. Do not remove existing `task_id` support if doing so would break the already-tested Stage 1-3 implementation. Compatibility is better than churn at this stage.
+6. Ensure all completion paths update the same state and refresh the same entities.
 
 Acceptance criteria:
 
-- Home Assistant starts without integration errors.
-- Invalid config produces a useful error.
-- Loaded tasks are visible in logs.
-
-## Stage 2 — Status and last completed sensors
-
-Goal: Each configured task creates a device and basic entities.
-
-Entities:
-
-- `sensor.<task>_status`
-- `sensor.<task>_last_completed`
-
-Acceptance criteria:
-
-- Each task appears as a device in Home Assistant.
-- Related entities are grouped under that device.
-- Entities have stable unique IDs.
-- Initial status is `pending` or `unknown`, depending on the chosen model.
-
-## Stage 3 — mark_done service/action and button
-
-Goal: All completion inputs can update task state through one mechanism.
-
-Add:
-
-- `tracked_tasks.mark_done` service/action
-- `button.<task>_mark_done`
-- `services.yaml`
-- service/action translations in `strings.json` if appropriate
-
-Acceptance criteria:
-
-- Developer Tools → Actions can call `tracked_tasks.mark_done`.
-- Calling the action updates `last_completed`.
-- Pressing the task button updates the same state.
-- Sensors update without restarting Home Assistant.
+- `button.press` on `button.bins_mark_done` updates `sensor.bins_last_completed`.
+- `button.press` on `button.bins_mark_done` updates `sensor.bins_status`.
+- NFC automation examples use `button.press`, not `tracked_tasks.mark_done` with `task_id`.
+- Zigbee automation examples use `button.press`, not `tracked_tasks.mark_done` with `task_id`.
+- If `tracked_tasks.mark_done` still exists, it is documented as optional/compatibility behaviour.
+- Integration still loads from YAML.
+- Existing Stage 1-3 tests, if any, still pass.
 
 ## Stage 4 — Schedule calculation
 
@@ -131,8 +118,8 @@ Add/update:
 
 - `README.md`
 - example YAML config
-- example NFC automation
-- example Zigbee button automation
+- example NFC automation using `button.press`
+- example Zigbee button automation using `button.press`
 - example overdue notification automation
 - known limitations
 

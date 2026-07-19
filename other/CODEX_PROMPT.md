@@ -1,16 +1,12 @@
-# Initial Codex Prompt — Build `tracked_tasks` Home Assistant Integration
+# Codex Prompt — Stage 3A Refactor Completion API
 
-I want you to build a custom Home Assistant integration called `tracked_tasks`.
+I have already had you implement Stages 1-3 of the `tracked_tasks` Home Assistant custom integration using the existing handoff docs.
 
-Please read `AGENTS.md` and the files in `docs/` before making changes. Follow the staged implementation plan rather than trying to build every future feature at once.
+Please read `AGENTS.md` and the files in `docs/` again, because the architecture has been refined.
 
-## Goal
+## Background
 
-Build a native-feeling Home Assistant custom integration for household task tracking.
-
-Each task should be defined once in YAML and should appear in Home Assistant as a device with related entities. Inputs like NFC tags, Zigbee buttons, dashboard buttons, or future Todoist sync should all mark the same task complete through a single integration service/action.
-
-The core service/action should be:
+The current implementation likely supports a service/action like this:
 
 ```yaml
 service: tracked_tasks.mark_done
@@ -18,106 +14,107 @@ data:
   task_id: bins
 ```
 
-## Start with these stages
+That works, but I want the integration to feel more Home Assistant-native and more object-like.
 
-Please implement Stages 1–3 first, then stop and summarise what was built, how to install it, and how to test it.
+Each configured task should be treated as a Home Assistant device. Its properties should be sensors/binary sensors, and its actions should be button entities or entity-targeted services.
 
-Stages 1–3 are:
-
-1. Custom integration skeleton that loads from YAML.
-2. Basic task device/entities:
-   - `sensor.<task>_status`
-   - `sensor.<task>_last_completed`
-3. Completion path:
-   - `tracked_tasks.mark_done` service/action
-   - `button.<task>_mark_done`
-   - button and service update the same task state
-
-## Initial YAML target
-
-Support this config shape initially:
+So the preferred completion path should now be:
 
 ```yaml
-tracked_tasks:
-  tasks:
-    bins:
-      name: Bins
-      schedule:
-        type: weekly
-        weekday: thursday
-        due_time: "09:00"
+service: button.press
+target:
+  entity_id: button.bins_mark_done
 ```
 
-For Stages 1–3, the schedule can be parsed and stored but does not need full due/overdue calculation yet.
+In other words, `button.bins_mark_done` should be the canonical "mark this task done" action.
 
-## Expected file structure
+## Task for this pass
 
-Create at least:
+Please implement **Stage 3A only**: refactor or adjust the completion API so the task button entity is the primary user-facing completion path.
 
-```text
-custom_components/tracked_tasks/
-  __init__.py
-  manifest.json
-  const.py
-  sensor.py
-  button.py
-  services.yaml
-  strings.json
+Do **not** continue into due/overdue scheduling, persistence, Todoist, config flow, or HACS in this pass.
+
+## Requirements
+
+1. Preserve the existing Stage 1-3 functionality.
+2. Ensure each task still appears as a Home Assistant device.
+3. Ensure each task still exposes:
+   - `sensor.<task>_status`
+   - `sensor.<task>_last_completed`
+   - `button.<task>_mark_done`
+4. Ensure pressing `button.<task>_mark_done` updates the same underlying task state used by the sensors.
+5. Ensure automations can mark a task complete with:
+
+   ```yaml
+   service: button.press
+   target:
+     entity_id: button.bins_mark_done
+   ```
+
+6. Review the existing `tracked_tasks.mark_done` service/action:
+   - Prefer keeping it for backwards compatibility if it already works.
+   - If feasible, add support for entity targeting, e.g.
+
+     ```yaml
+     service: tracked_tasks.mark_done
+     target:
+       entity_id: button.bins_mark_done
+     ```
+
+   - If `data.task_id` remains supported, document it as compatibility/legacy usage rather than the primary recommended path.
+7. Make sure all completion paths call one shared internal method/function so state handling does not diverge.
+8. Update documentation and examples to use `button.press` as the recommended NFC/Zigbee/dashboard completion mechanism.
+9. Add or update tests if the project currently has tests. At minimum, document manual test steps.
+
+## Example automations that should appear in the docs
+
+### NFC
+
+```yaml
+alias: Mark bins done from NFC
+trigger:
+  - platform: tag
+    tag_id: YOUR_TAG_ID
+action:
+  - service: button.press
+    target:
+      entity_id: button.bins_mark_done
 ```
 
-You may also create supporting files such as:
+### Zigbee button
 
-```text
-models.py
-schedule.py
-storage.py
-binary_sensor.py
+```yaml
+alias: Mark bins done from Zigbee button
+trigger:
+  - platform: state
+    entity_id: sensor.bins_button_action
+    to: "single"
+action:
+  - service: button.press
+    target:
+      entity_id: button.bins_mark_done
 ```
 
-if useful, but keep the first implementation simple.
+## Acceptance criteria
 
-## Behaviour for first implementation
+Please stop after this stage and summarise what changed.
 
-- Home Assistant should load the integration from YAML.
-- Each configured task should create a Home Assistant device.
-- Each task should expose a status sensor and last-completed sensor.
-- Each task should expose a mark-done button.
-- Calling `tracked_tasks.mark_done` should update the task’s last completed timestamp.
-- Pressing the mark-done button should update the same state.
-- Entities should refresh without needing to restart Home Assistant.
-- Use stable `unique_id` values.
-- Use `device_info` so the task’s entities are grouped under one device.
+I should be able to verify:
 
-## State model for Stages 1–3
+1. Home Assistant loads the integration without errors.
+2. `button.bins_mark_done` exists.
+3. Pressing the button in the UI updates `sensor.bins_last_completed`.
+4. Calling `button.press` against `button.bins_mark_done` updates `sensor.bins_last_completed`.
+5. `sensor.bins_status` updates consistently.
+6. Any retained `tracked_tasks.mark_done` service still works if it existed before, but docs now present it as optional/compatibility behaviour.
+7. Documentation points to Stage 4 as the next step after this pass.
 
-A simple in-memory state is acceptable initially:
-
-```python
-last_completed: datetime | None
-```
-
-Status may be:
-
-- `pending` if never completed
-- `done` if completed at least once
-
-Persistence, due/overdue logic, and recurrence can come in later stages.
-
-## After implementing Stages 1–3
+## After completing this pass
 
 Please provide:
 
-1. A summary of changed/created files.
-2. Install instructions.
-3. Example `configuration.yaml`.
-4. Example NFC automation using `tracked_tasks.mark_done`.
-5. Known limitations.
-6. Recommended next step, likely Stage 4 schedule calculation and Stage 5 due/overdue entities.
-
-## Coding expectations
-
-- Use modern Python and type hints.
-- Keep Home Assistant integration glue clear and readable.
-- Avoid blocking I/O.
-- Keep the first version understandable for someone who has not built a HA custom integration before.
-- Do not add Todoist, config flow, HACS, or persistence until the basic integration works.
+1. A concise summary of code changes.
+2. Any breaking changes, if unavoidable.
+3. Manual test instructions.
+4. Updated example automations.
+5. The recommended next Codex prompt/stage, which should be Stage 4 schedule calculation.
