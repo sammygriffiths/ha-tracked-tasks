@@ -1,0 +1,15 @@
+{
+  "title": "Tracked Tasks",
+  "services": {
+    "mark_done": {
+      "name": "Mark done",
+      "description": "Mark a tracked task as completed.",
+      "fields": {
+        "task_id": {
+          "name": "Task ID",
+          "description": "The YAML task identifier to mark as completed."
+        }
+      }
+    }
+  }
+}
