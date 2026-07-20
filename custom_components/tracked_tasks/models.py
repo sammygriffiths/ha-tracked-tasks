@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from .const import STATUS_DONE, STATUS_PENDING
+from .schedule import ScheduleError, get_current_obligation_due_at
 
 
 @dataclass(frozen=True, slots=True)
@@ -27,6 +28,7 @@ class TaskState:
     """
 
     last_completed: datetime | None = None
+    completed_due_at: datetime | None = None
 
     @property
     def status(self) -> str:
@@ -68,7 +70,15 @@ class TrackedTaskManager:
     def async_mark_done(self, task_id: str) -> TrackedTask:
         """Mark a task done and notify subscribers."""
         task = self.tasks[task_id]
-        task.state.last_completed = datetime.now(UTC)
+        completed_at = datetime.now(timezone.utc)
+        task.state.last_completed = completed_at
+        try:
+            task.state.completed_due_at = get_current_obligation_due_at(
+                task.config.schedule,
+                completed_at,
+            )
+        except ScheduleError:
+            task.state.completed_due_at = None
         self._notify_listeners()
         return task
 

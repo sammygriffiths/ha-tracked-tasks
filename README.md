@@ -31,7 +31,7 @@ tracked_tasks:
         due_time: "09:00"
 ```
 
-The schedule is parsed and stored in this stage, but it is not yet used for due or overdue calculation.
+Daily and weekly schedules can now be evaluated by pure Python schedule logic, though the current Home Assistant entities still expose only the Stage 3A status and last-completed values until Stage 5 wires schedule outputs into entities.
 
 ## Entities
 
@@ -75,6 +75,45 @@ data:
   task_id: bins
 ```
 
+When a supported schedule exists, completion also records which scheduled obligation was completed internally. For example, if `bins` is due Thursday at 09:00 and you press the button on Wednesday evening, that completion is associated with the upcoming Thursday 09:00 obligation.
+
+## Schedule calculation
+
+Stage 4 adds a pure Python schedule module at `custom_components/tracked_tasks/schedule.py`. It has no Home Assistant imports and can be tested directly.
+
+Supported schedule types:
+
+```yaml
+schedule:
+  type: daily
+  due_time: "09:00"
+```
+
+```yaml
+schedule:
+  type: weekly
+  weekday: thursday
+  due_time: "09:00"
+```
+
+Given a schedule, task state, and `now`, the calculation returns:
+
+- `status`
+- `due_at`
+- `current_obligation_due_at`
+- `current_obligation_completed`
+- `due`
+- `overdue`
+- `time_remaining`
+
+Current Stage 4 semantics:
+
+- Before the due timestamp, an incomplete task is `pending`.
+- At or after the due timestamp, an incomplete task is `overdue`.
+- If `completed_due_at` matches the current obligation due timestamp, the task is `done` and `due_at` advances to the next occurrence.
+- `due` is currently always `false`; a separate due window can be added later.
+- `time_remaining` counts down to `due_at` and is zero once overdue.
+
 ## NFC automation example
 
 ```yaml
@@ -114,14 +153,15 @@ action:
 ## Known limitations
 
 - Completion state is in memory only and is lost on Home Assistant restart.
-- Schedule configuration is stored but not yet used for status calculation.
-- Due, overdue, next due, and time remaining entities are not implemented yet.
-- No config flow, options flow, Todoist sync, HACS metadata, or custom dashboard card is included.
+- Schedule calculation supports only `daily` and `weekly` schedules.
+- Monthly, interval-days, one-off schedules, full recurrence rules, and daylight-saving edge cases are not implemented yet.
+- Schedule outputs are pure Python only in Stage 4; due, overdue, next due, and time remaining entities are not implemented yet.
+- No UI config flow, options flow, Todoist sync, HACS metadata, or custom dashboard card is included.
 
 ## Roadmap
 
 Recommended next stages:
 
-1. Stage 4: move schedule calculation into pure Python code with tests.
-2. Add due/overdue, next due, and time remaining entities.
+1. Stage 5: add due/overdue, next due, and time remaining entities using the schedule module.
+2. Add refresh behavior so schedule-derived entities update as time passes.
 3. Add Home Assistant-native persistence for `last_completed`.
