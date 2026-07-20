@@ -6,7 +6,7 @@ DOMAIN = "tracked_tasks"
 CONF_TASKS = "tasks"
 CONF_SCHEDULE = "schedule"
 
-PLATFORMS = ["sensor", "button"]
+PLATFORMS = ["sensor", "binary_sensor", "button"]
 
 SERVICE_MARK_DONE = "mark_done"
 ATTR_TASK_ID = "task_id"

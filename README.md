@@ -14,7 +14,7 @@ custom_components/tracked_tasks/
 
 Then restart Home Assistant after adding your YAML configuration.
 
-This version reports `0.1.2` in `manifest.json`.
+This version reports `0.1.3` in `manifest.json`.
 
 ## Configuration
 
@@ -31,7 +31,7 @@ tracked_tasks:
         due_time: "09:00"
 ```
 
-Daily and weekly schedules can now be evaluated by pure Python schedule logic, though the current Home Assistant entities still expose only the Stage 3A status and last-completed values until Stage 5 wires schedule outputs into entities.
+Daily and weekly schedules are evaluated by pure Python schedule logic and exposed through Home Assistant entities.
 
 ## Entities
 
@@ -40,6 +40,10 @@ For a task with ID `bins`, Home Assistant creates:
 ```text
 sensor.bins_status
 sensor.bins_last_completed
+sensor.bins_next_due
+sensor.bins_time_remaining
+binary_sensor.bins_due
+binary_sensor.bins_overdue
 button.bins_mark_done
 ```
 
@@ -79,7 +83,7 @@ When a supported schedule exists, completion also records which scheduled obliga
 
 ## Schedule calculation
 
-Stage 4 adds a pure Python schedule module at `custom_components/tracked_tasks/schedule.py`. It has no Home Assistant imports and can be tested directly.
+The schedule module at `custom_components/tracked_tasks/schedule.py` has no Home Assistant imports and can be tested directly.
 
 Supported schedule types:
 
@@ -106,13 +110,22 @@ Given a schedule, task state, and `now`, the calculation returns:
 - `overdue`
 - `time_remaining`
 
-Current Stage 4 semantics:
+Current schedule semantics:
 
 - Before the due timestamp, an incomplete task is `pending`.
 - At or after the due timestamp, an incomplete task is `overdue`.
 - If `completed_due_at` matches the current obligation due timestamp, the task is `done` and `due_at` advances to the next occurrence.
 - `due` is currently always `false`; a separate due window can be added later.
 - `time_remaining` counts down to `due_at` and is zero once overdue.
+
+Home Assistant entity behavior:
+
+- `sensor.<task>_status` uses schedule-derived status for supported daily/weekly tasks.
+- `sensor.<task>_next_due` exposes the current or next due timestamp.
+- `sensor.<task>_time_remaining` exposes whole minutes remaining until due.
+- `binary_sensor.<task>_due` exposes the calculated due boolean.
+- `binary_sensor.<task>_overdue` turns on when the current obligation is overdue.
+- Schedule-derived entities refresh every minute and whenever the task is marked done.
 
 ## NFC automation example
 
@@ -144,24 +157,25 @@ action:
 ## Manual testing
 
 1. Install the integration folder and add a `bins` task to `configuration.yaml`.
-2. Restart Home Assistant and confirm `button.bins_mark_done`, `sensor.bins_status`, and `sensor.bins_last_completed` exist on one `Bins` device.
+2. Restart Home Assistant and confirm these entities exist on one `Bins` device: `button.bins_mark_done`, `sensor.bins_status`, `sensor.bins_last_completed`, `sensor.bins_next_due`, `sensor.bins_time_remaining`, `binary_sensor.bins_due`, and `binary_sensor.bins_overdue`.
 3. Press `button.bins_mark_done` in the UI and confirm `sensor.bins_last_completed` updates.
 4. In Developer Tools -> Actions, call `button.press` targeting `button.bins_mark_done` and confirm the timestamp updates again.
-5. Confirm `sensor.bins_status` is `pending` before first completion and `done` after completion.
-6. Optionally call the compatibility action with `target.entity_id` or legacy `data.task_id` and confirm it updates the same sensors.
+5. Confirm `sensor.bins_status`, `sensor.bins_next_due`, `sensor.bins_time_remaining`, and `binary_sensor.bins_overdue` reflect the configured schedule.
+6. Temporarily set a daily `due_time` a few minutes in the future and confirm schedule-derived entities refresh as time passes.
+7. Optionally call the compatibility action with `target.entity_id` or legacy `data.task_id` and confirm it updates the same sensors.
 
 ## Known limitations
 
 - Completion state is in memory only and is lost on Home Assistant restart.
 - Schedule calculation supports only `daily` and `weekly` schedules.
 - Monthly, interval-days, one-off schedules, full recurrence rules, and daylight-saving edge cases are not implemented yet.
-- Schedule outputs are pure Python only in Stage 4; due, overdue, next due, and time remaining entities are not implemented yet.
+- `binary_sensor.<task>_due` is currently always off because a separate due window has not been implemented yet.
 - No UI config flow, options flow, Todoist sync, HACS metadata, or custom dashboard card is included.
 
 ## Roadmap
 
 Recommended next stages:
 
-1. Stage 5: add due/overdue, next due, and time remaining entities using the schedule module.
-2. Add refresh behavior so schedule-derived entities update as time passes.
-3. Add Home Assistant-native persistence for `last_completed`.
+1. Stage 6: add Home Assistant-native persistence for `last_completed` and `completed_due_at`.
+2. Add monthly, interval-days, and one-off schedules.
+3. Add an explicit due-window model if `binary_sensor.<task>_due` should turn on before overdue.

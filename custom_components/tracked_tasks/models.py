@@ -8,7 +8,12 @@ from datetime import datetime, timezone
 from typing import Any
 
 from .const import STATUS_DONE, STATUS_PENDING
-from .schedule import ScheduleError, get_current_obligation_due_at
+from .schedule import (
+    ScheduleError,
+    ScheduleEvaluation,
+    evaluate_schedule,
+    get_current_obligation_due_at,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -57,6 +62,21 @@ class TrackedTaskManager:
     def get_task(self, task_id: str) -> TrackedTask | None:
         """Return a tracked task by ID."""
         return self.tasks.get(task_id)
+
+    def evaluate_task(
+        self,
+        task: TrackedTask,
+        now: datetime | None = None,
+    ) -> ScheduleEvaluation | None:
+        """Evaluate a task schedule, if the schedule is supported."""
+        try:
+            return evaluate_schedule(
+                task.config.schedule,
+                task.state,
+                now or datetime.now(timezone.utc),
+            )
+        except ScheduleError:
+            return None
 
     def async_add_listener(self, listener: Callable[[], None]) -> Callable[[], None]:
         """Subscribe to task state changes."""
