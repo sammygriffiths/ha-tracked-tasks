@@ -68,13 +68,10 @@ Add:
 - `models.py`
 - `schedule.py`
 
-Support first:
+Supported schedule types:
 
 - daily
 - weekly
-
-Then add:
-
 - monthly
 - interval days
 - one-off

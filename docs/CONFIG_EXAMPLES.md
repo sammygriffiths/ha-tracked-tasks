@@ -48,6 +48,7 @@ tracked_tasks:
       schedule:
         type: one_off
         due_at: "2027-01-17T18:00:00"
+        overdue_at: "2027-01-17T21:00:00"
 ```
 
 ## Due vs overdue semantics
@@ -75,6 +76,8 @@ Next occurrence          -> pending again
 ```
 
 If `overdue_time` is omitted, it defaults to `due_time`, preserving strict-deadline behaviour.
+
+For one-off tasks, `due_at` starts the active/reminder window and optional `overdue_at` starts the final overdue state. If `overdue_at` is omitted, it defaults to `due_at`.
 
 For now, `overdue_time` must be equal to or later than `due_time`; cross-midnight due windows are not supported yet.
 

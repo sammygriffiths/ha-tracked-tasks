@@ -96,6 +96,7 @@ class TrackedTaskManager:
             task.state.completed_due_at = get_current_obligation_due_at(
                 task.config.schedule,
                 completed_at,
+                task.state,
             )
         except ScheduleError:
             task.state.completed_due_at = None

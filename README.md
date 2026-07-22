@@ -14,7 +14,7 @@ custom_components/tracked_tasks/
 
 Then restart Home Assistant after adding your YAML configuration.
 
-This version reports `0.1.4` in `manifest.json`.
+This version reports `0.1.6` in `manifest.json`.
 
 ## Configuration
 
@@ -32,7 +32,7 @@ tracked_tasks:
         overdue_time: "23:00"
 ```
 
-Daily and weekly schedules are evaluated by pure Python schedule logic and exposed through Home Assistant entities.
+Daily, weekly, monthly, interval-days, and one-off schedules are evaluated by pure Python schedule logic and exposed through Home Assistant entities.
 
 ## Entities
 
@@ -103,7 +103,32 @@ schedule:
   overdue_time: "23:00"
 ```
 
+```yaml
+schedule:
+  type: monthly
+  day: 1
+  due_time: "18:00"
+  overdue_time: "22:00"
+```
+
+```yaml
+schedule:
+  type: interval_days
+  every: 30
+  due_time: "12:00"
+  overdue_time: "20:00"
+```
+
+```yaml
+schedule:
+  type: one_off
+  due_at: "2027-01-17T18:00:00"
+  overdue_at: "2027-01-17T21:00:00"
+```
+
 `due_time` starts the active/reminder window. `overdue_time` starts the final overdue state. If `overdue_time` is omitted, it defaults to `due_time`, preserving strict-deadline behavior.
+
+For one-off schedules, `due_at` starts the active/reminder window and optional `overdue_at` starts the final overdue state. If `overdue_at` is omitted, it defaults to `due_at`, preserving strict-deadline behavior.
 
 Strict behavior:
 
@@ -141,6 +166,9 @@ Current schedule semantics:
 - If `completed_due_at` matches the current obligation due timestamp, the task is `done` and `due_at` advances to the next occurrence.
 - `overdue_time` must be equal to or later than `due_time`; cross-midnight due windows are not supported yet.
 - `time_remaining` counts down to `due_at` and is zero once due or overdue.
+- Monthly schedules clamp days that do not exist in a shorter month to that month's final day.
+- Interval-days schedules use the last completed obligation as their anchor once completed; before first completion, the initial occurrence is based on today's `due_time`.
+- One-off schedules support an optional `overdue_at` and do not advance to another occurrence.
 
 Home Assistant entity behavior:
 
@@ -193,9 +221,9 @@ action:
 ## Known limitations
 
 - Completion state is in memory only and is lost on Home Assistant restart.
-- Schedule calculation supports only `daily` and `weekly` schedules.
-- Monthly, interval-days, one-off schedules, full recurrence rules, and daylight-saving edge cases are not implemented yet.
+- Full recurrence rules and daylight-saving edge cases are not implemented yet.
 - Cross-midnight windows such as `due_time: "23:00"` with `overdue_time: "01:00"` are rejected for now.
+- Interval-days schedules do not yet support an explicit start date.
 - No UI config flow, options flow, Todoist sync, HACS metadata, or custom dashboard card is included.
 
 ## Roadmap
@@ -203,5 +231,5 @@ action:
 Recommended next stages:
 
 1. Stage 6: add Home Assistant-native persistence for `last_completed` and `completed_due_at`.
-2. Add monthly, interval-days, and one-off schedules.
+2. Add explicit start dates for interval-days schedules if needed.
 3. Add cross-midnight due windows if needed.

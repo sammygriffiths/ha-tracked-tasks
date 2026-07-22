@@ -239,9 +239,12 @@ schedule:
 schedule:
   type: one_off
   due_at: "2027-01-17T18:00:00"
+  overdue_at: "2027-01-17T21:00:00"
 ```
 
-For one-off schedules, Stage 5A may either treat `due_at` as both due and overdue, or add an optional explicit `overdue_at`. If this is not implemented yet, document the limitation.
+For one-off schedules, `due_at` starts the active/reminder window and optional `overdue_at` starts the final overdue state. If `overdue_at` is omitted, it defaults to `due_at`, preserving strict-deadline behaviour.
+
+Monthly schedules clamp days that do not exist in a shorter month to that month's final day. Interval-days schedules use the last completed obligation as their anchor once completed; before first completion, the initial occurrence is based on today's `due_time`.
 
 ## Entity design
 
