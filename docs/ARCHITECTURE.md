@@ -4,7 +4,7 @@
 
 `tracked_tasks` is a custom Home Assistant integration for modelling household tasks as native Home Assistant devices/entities.
 
-The central concept is a scheduled task/obligation. Each task owns its own state and derived status. Inputs such as NFC tags, Zigbee buttons, dashboard buttons, Todoist completions, or voice commands should not implement task-specific timing logic. They should complete the task by targeting the task's `button.<task>_mark_done` entity.
+The central concept is a scheduled task/obligation. Each task owns its own state and derived status. Inputs such as NFC tags, Zigbee buttons, dashboard buttons, Todoist completions, or voice commands should not implement task-specific timing logic. They should press the task's `button.<task>_mark_done` entity, or call an entity-targeted integration action that delegates to the same code path.
 
 ## Core design
 
@@ -12,7 +12,7 @@ The central concept is a scheduled task/obligation. Each task owns its own state
 Input trigger
   NFC tag / Zigbee button / dashboard button / Todoist / voice
         ↓
-button.press target: button.<task>_mark_done
+button.press -> button.<task>_mark_done
         ↓
 Tracked task state updates
         ↓
@@ -20,20 +20,6 @@ Entities update
   status / due / overdue / next_due / time_remaining / last_completed
         ↓
 Normal Home Assistant automations react to entity state
-```
-
-This replaces the earlier procedural-first design:
-
-```text
-tracked_tasks.mark_done(task_id)
-```
-
-A `tracked_tasks.mark_done` service may still exist as a compatibility/convenience API, but it should not be the primary path shown in examples. If kept, prefer an entity-targeted shape:
-
-```yaml
-service: tracked_tasks.mark_done
-target:
-  entity_id: button.bins_mark_done
 ```
 
 ## Why this exists
@@ -48,38 +34,6 @@ This avoids scattering each task across:
 
 Instead, each task is defined once and exposed as a group of related entities under one Home Assistant device.
 
-## Home Assistant object model mapping
-
-```text
-OOP task object    -> Home Assistant device
-Object fields      -> sensors / binary sensors
-Object methods     -> button entities or entity-targeted services
-Object events      -> entity state changes
-```
-
-For example:
-
-```text
-Device: Bins
-  sensor.bins_status
-  sensor.bins_last_completed
-  sensor.bins_next_due
-  sensor.bins_time_remaining
-  binary_sensor.bins_due
-  binary_sensor.bins_overdue
-  button.bins_mark_done
-```
-
-Do not try to create pseudo-device namespaces such as:
-
-```text
-bins.status
-bins.mark_done
-tracked_tasks.bins_mark_done
-```
-
-That fights Home Assistant's domain/entity model. The idiomatic model is a device with entities under standard domains such as `sensor`, `binary_sensor`, and `button`.
-
 ## Integration domain
 
 ```text
@@ -93,7 +47,6 @@ custom_components/tracked_tasks/
   __init__.py
   manifest.json
   const.py
-  coordinator.py          # optional, if useful
   models.py
   schedule.py
   storage.py
@@ -104,13 +57,13 @@ custom_components/tracked_tasks/
   strings.json
 ```
 
-Not all files are required immediately, but schedule/status logic should be split out early so it can be tested independently.
+Not all files are required in the first implementation, but schedule/status logic should be split out early so it can be tested independently.
 
 ## Data model
 
 ### Task config
 
-A task config describes what the task is and when it is due.
+A task config describes what the task is and when it is due/overdue.
 
 Example:
 
@@ -121,8 +74,9 @@ tracked_tasks:
       name: Bins
       schedule:
         type: weekly
-        weekday: thursday
-        due_time: "09:00"
+        weekday: wednesday
+        due_time: "20:00"
+        overdue_time: "23:00"
 ```
 
 Suggested Python model:
@@ -134,6 +88,22 @@ class TaskConfig:
     name: str
     schedule: ScheduleConfig
 ```
+
+Suggested schedule model:
+
+```python
+@dataclass(frozen=True)
+class ScheduleConfig:
+    type: str
+    due_time: time | None = None
+    overdue_time: time | None = None
+    weekday: str | None = None
+    day: int | None = None
+    every: int | None = None
+    due_at: datetime | None = None
+```
+
+If `overdue_time` is omitted, it should be normalised to `due_time` for schedule types that use `due_time`.
 
 ### Task state
 
@@ -152,25 +122,75 @@ Depending on the recurrence model, storing `completed_due_at` may be more reliab
 
 ## Status model
 
-Initial statuses:
+Statuses:
 
 ```text
-pending  — not yet in the active due/overdue window
-due      — current obligation is due but not overdue
-overdue  — deadline has passed and current obligation is incomplete
+pending  — not yet in the active due window
+due      — current obligation is due/active but not overdue
+overdue  — overdue deadline has passed and current obligation is incomplete
 done     — current obligation has been completed
 disabled — optional future state
 ```
 
-## Due windows
+## Due and overdue windows
 
-For v1, keep the model simple:
+The integration distinguishes between the start of the due/reminder window and the final overdue deadline.
 
-- `next_due` is the deadline timestamp for the current/upcoming obligation.
-- A task becomes `overdue` when `now >= next_due` and that obligation has not been completed.
-- Whether a task has a separate `due` state before being overdue can be configured later. In v1, `due` may simply mean “the obligation is current but not yet overdue”, or it may be omitted if the model is not ready.
+```yaml
+schedule:
+  type: weekly
+  weekday: wednesday
+  due_time: "20:00"
+  overdue_time: "23:00"
+```
 
-Document the chosen semantics clearly.
+This means:
+
+```text
+Before Wednesday 20:00   -> pending
+Wednesday 20:00-23:00    -> due
+After Wednesday 23:00    -> overdue
+After pressing mark done -> done for the current occurrence
+```
+
+If `overdue_time` is omitted, the integration should default it to `due_time`, preserving previous strict-deadline behaviour:
+
+```yaml
+schedule:
+  type: daily
+  due_time: "09:00"
+```
+
+is equivalent to:
+
+```yaml
+schedule:
+  type: daily
+  due_time: "09:00"
+  overdue_time: "09:00"
+```
+
+For Stage 5A, `overdue_time` must be equal to or later than `due_time` on the same scheduled date. Cross-midnight windows such as `due_time: "23:00"` and `overdue_time: "01:00"` are intentionally rejected until the recurrence model explicitly supports them.
+
+### Entity meaning
+
+```text
+binary_sensor.<task>_due
+```
+
+Should be `on` when the current occurrence is incomplete and now is between the occurrence's `due_time` and `overdue_time`.
+
+```text
+binary_sensor.<task>_overdue
+```
+
+Should be `on` when the current occurrence is incomplete and now is at or after the occurrence's `overdue_time`.
+
+```text
+sensor.<task>_status
+```
+
+Should return `pending`, `due`, `overdue`, or `done` based on the current occurrence.
 
 ## Supported schedules for v1/v2
 
@@ -180,6 +200,7 @@ Document the chosen semantics clearly.
 schedule:
   type: daily
   due_time: "09:00"
+  overdue_time: "09:30"
 ```
 
 ### Weekly
@@ -188,7 +209,8 @@ schedule:
 schedule:
   type: weekly
   weekday: thursday
-  due_time: "09:00"
+  due_time: "20:00"
+  overdue_time: "23:00"
 ```
 
 ### Monthly
@@ -198,6 +220,7 @@ schedule:
   type: monthly
   day: 1
   due_time: "18:00"
+  overdue_time: "22:00"
 ```
 
 ### Interval days
@@ -207,6 +230,7 @@ schedule:
   type: interval_days
   every: 30
   due_time: "18:00"
+  overdue_time: "22:00"
 ```
 
 ### One-off
@@ -216,6 +240,8 @@ schedule:
   type: one_off
   due_at: "2027-01-17T18:00:00"
 ```
+
+For one-off schedules, Stage 5A may either treat `due_at` as both due and overdue, or add an optional explicit `overdue_at`. If this is not implemented yet, document the limitation.
 
 ## Entity design
 
@@ -239,11 +265,9 @@ All entities should share device info using identifiers like:
 ("tracked_tasks", task_id)
 ```
 
-## Completion API
+## Services/actions
 
-### Primary path: button entity
-
-Marks the current task obligation as complete.
+### Preferred mark-done path
 
 ```yaml
 service: button.press
@@ -253,9 +277,9 @@ target:
 
 This is the main user-facing API used by NFC tags, Zigbee buttons, dashboard controls, and future sync integrations.
 
-### Optional compatibility path: integration service
+### Optional compatibility service
 
-If the integration keeps a custom service/action, prefer an entity-targeted version:
+If retained, this should delegate to the same shared completion method as the button entity:
 
 ```yaml
 service: tracked_tasks.mark_done
@@ -263,21 +287,13 @@ target:
   entity_id: button.bins_mark_done
 ```
 
-Avoid making this the canonical documentation path:
-
-```yaml
-service: tracked_tasks.mark_done
-data:
-  task_id: bins
-```
-
-It may be retained for compatibility with older automations, but should be documented as legacy.
+A legacy `data.task_id` form is acceptable only for backwards compatibility and should not be the primary documented path.
 
 ## Persistence
 
 The integration should not rely on Home Assistant helper entities as its internal state store.
 
-Persist task completion state using Home Assistant-native storage. In early development, in-memory state is acceptable only for Stage 1-3 proof of concept.
+Persist task completion state using Home Assistant-native storage. In early development, in-memory state is acceptable only for proof of concept stages.
 
 Persist at least:
 
@@ -289,7 +305,7 @@ Persist at least:
 - Config flow UI
 - Options flow UI
 - Task enable/disable switch
-- Skip current occurrence service
+- Skip current occurrence service/action
 - Completion history sensor/attribute
 - Todoist sync as optional input/mirror
 - HACS packaging

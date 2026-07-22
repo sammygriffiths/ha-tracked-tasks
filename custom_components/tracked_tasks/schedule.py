@@ -1,7 +1,7 @@
 """Pure schedule calculation for tracked tasks.
 
-Stage 4 intentionally supports only daily and weekly schedules. The output
-models a task as a scheduled obligation identified by its due timestamp.
+The output models a task as a scheduled obligation identified by its due
+timestamp, with an optional later overdue deadline.
 """
 
 from __future__ import annotations
@@ -30,6 +30,8 @@ WEEKDAYS = {
     "sunday": 6,
 }
 
+SCHEDULES_WITH_DUE_TIME = {SCHEDULE_DAILY, SCHEDULE_WEEKLY}
+
 
 class ScheduleError(ValueError):
     """Raised when a schedule cannot be calculated."""
@@ -48,6 +50,7 @@ class ScheduleEvaluation:
 
     status: str
     due_at: datetime
+    overdue_at: datetime
     current_obligation_due_at: datetime
     current_obligation_completed: bool
     due: bool
@@ -62,6 +65,7 @@ def evaluate_schedule(
 ) -> ScheduleEvaluation:
     """Evaluate a daily or weekly task schedule at a point in time."""
     current_due_at = get_current_obligation_due_at(schedule, now)
+    current_overdue_at = get_overdue_at(schedule, current_due_at)
     completed = state.completed_due_at == current_due_at
 
     if completed:
@@ -69,6 +73,7 @@ def evaluate_schedule(
         return ScheduleEvaluation(
             status=STATUS_DONE,
             due_at=due_at,
+            overdue_at=get_overdue_at(schedule, due_at),
             current_obligation_due_at=current_due_at,
             current_obligation_completed=True,
             due=False,
@@ -80,6 +85,7 @@ def evaluate_schedule(
         return ScheduleEvaluation(
             status=STATUS_PENDING,
             due_at=current_due_at,
+            overdue_at=current_overdue_at,
             current_obligation_due_at=current_due_at,
             current_obligation_completed=False,
             due=False,
@@ -87,9 +93,22 @@ def evaluate_schedule(
             time_remaining=current_due_at - now,
         )
 
+    if now < current_overdue_at:
+        return ScheduleEvaluation(
+            status=STATUS_DUE,
+            due_at=current_due_at,
+            overdue_at=current_overdue_at,
+            current_obligation_due_at=current_due_at,
+            current_obligation_completed=False,
+            due=True,
+            overdue=False,
+            time_remaining=timedelta(),
+        )
+
     return ScheduleEvaluation(
         status=STATUS_OVERDUE,
         due_at=current_due_at,
+        overdue_at=current_overdue_at,
         current_obligation_due_at=current_due_at,
         current_obligation_completed=False,
         due=False,
@@ -133,6 +152,23 @@ def get_current_obligation_due_at(
     raise ScheduleError(f"Unsupported schedule type: {schedule_type!r}")
 
 
+def normalize_schedule_config(schedule: Mapping[str, Any]) -> dict[str, Any]:
+    """Return a normalized schedule config with default overdue_time applied."""
+    normalized = dict(schedule)
+    schedule_type = normalized.get("type")
+    if schedule_type not in SCHEDULES_WITH_DUE_TIME:
+        return normalized
+
+    due_time = _parse_due_time(normalized)
+    overdue_time = _parse_overdue_time(normalized, due_time)
+    normalized.setdefault("overdue_time", due_time.isoformat(timespec="minutes"))
+
+    if overdue_time < due_time:
+        raise ScheduleError("overdue_time must be equal to or later than due_time")
+
+    return normalized
+
+
 def get_next_obligation_due_at(
     schedule: Mapping[str, Any],
     due_at: datetime,
@@ -149,6 +185,16 @@ def get_next_obligation_due_at(
     raise ScheduleError(f"Unsupported schedule type: {schedule_type!r}")
 
 
+def get_overdue_at(
+    schedule: Mapping[str, Any],
+    due_at: datetime,
+) -> datetime:
+    """Return the overdue deadline for the supplied obligation due timestamp."""
+    due_time = _parse_due_time(schedule)
+    overdue_time = _parse_overdue_time(schedule, due_time)
+    return _combine(due_at.date(), overdue_time, due_at)
+
+
 def _parse_due_time(schedule: Mapping[str, Any]) -> time:
     raw_due_time = schedule.get("due_time")
     if not isinstance(raw_due_time, str):
@@ -158,6 +204,22 @@ def _parse_due_time(schedule: Mapping[str, Any]) -> time:
         return time.fromisoformat(raw_due_time)
     except ValueError as err:
         raise ScheduleError(f"Invalid due_time: {raw_due_time!r}") from err
+
+
+def _parse_overdue_time(schedule: Mapping[str, Any], due_time: time) -> time:
+    raw_overdue_time = schedule.get("overdue_time", schedule.get("due_time"))
+    if not isinstance(raw_overdue_time, str):
+        raise ScheduleError("Schedule requires overdue_time as HH:MM")
+
+    try:
+        overdue_time = time.fromisoformat(raw_overdue_time)
+    except ValueError as err:
+        raise ScheduleError(f"Invalid overdue_time: {raw_overdue_time!r}") from err
+
+    if overdue_time < due_time:
+        raise ScheduleError("overdue_time must be equal to or later than due_time")
+
+    return overdue_time
 
 
 def _parse_weekday(schedule: Mapping[str, Any]) -> int:

@@ -25,6 +25,7 @@ from .const import (
     SERVICE_MARK_DONE,
 )
 from .models import TaskConfig, TrackedTaskManager
+from .schedule import ScheduleError, normalize_schedule_config
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -34,6 +35,8 @@ TASK_SCHEMA = vol.Schema(
         vol.Required(CONF_SCHEDULE): vol.Schema(
             {
                 vol.Required("type"): cv.string,
+                vol.Optional("due_time"): cv.string,
+                vol.Optional("overdue_time"): cv.string,
             },
             extra=vol.ALLOW_EXTRA,
         ),
@@ -126,14 +129,20 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
 def _parse_task_configs(raw_tasks: dict[str, dict[str, Any]]) -> dict[str, TaskConfig]:
     """Convert YAML task dictionaries into task config objects."""
-    return {
-        task_id: TaskConfig(
+    task_configs: dict[str, TaskConfig] = {}
+    for task_id, task_config in raw_tasks.items():
+        try:
+            schedule = normalize_schedule_config(task_config[CONF_SCHEDULE])
+        except ScheduleError as err:
+            raise vol.Invalid(f"Invalid schedule for task '{task_id}': {err}") from err
+
+        task_configs[task_id] = TaskConfig(
             task_id=task_id,
             name=task_config["name"],
-            schedule=task_config[CONF_SCHEDULE],
+            schedule=schedule,
         )
-        for task_id, task_config in raw_tasks.items()
-    }
+
+    return task_configs
 
 
 def _tasks_from_mark_done_call(

@@ -9,8 +9,9 @@ tracked_tasks:
       name: Bins
       schedule:
         type: weekly
-        weekday: thursday
-        due_time: "09:00"
+        weekday: wednesday
+        due_time: "20:00"
+        overdue_time: "23:00"
 
     dishwasher_salt:
       name: Dishwasher Salt
@@ -18,12 +19,21 @@ tracked_tasks:
         type: monthly
         day: 1
         due_time: "18:00"
+        overdue_time: "22:00"
 
     morning_medication:
       name: Morning Medication
       schedule:
         type: daily
         due_time: "09:30"
+        overdue_time: "10:00"
+
+    strict_task_example:
+      name: Strict Task Example
+      schedule:
+        type: daily
+        due_time: "09:00"
+        # overdue_time omitted, so overdue_time defaults to due_time
 
     change_filter:
       name: Change Filter
@@ -31,6 +41,7 @@ tracked_tasks:
         type: interval_days
         every: 30
         due_time: "12:00"
+        overdue_time: "20:00"
 
     rsvp_deadline:
       name: RSVP Deadline
@@ -39,11 +50,37 @@ tracked_tasks:
         due_at: "2027-01-17T18:00:00"
 ```
 
-## Expected device/entities
+## Due vs overdue semantics
 
-For `bins`, expect a Home Assistant device called something like `Bins`.
+For this task:
 
-Entities on that device should include:
+```yaml
+bins:
+  name: Bins
+  schedule:
+    type: weekly
+    weekday: wednesday
+    due_time: "20:00"
+    overdue_time: "23:00"
+```
+
+Expected lifecycle for an incomplete occurrence:
+
+```text
+Before Wednesday 20:00   -> pending
+Wednesday 20:00-23:00    -> due
+After Wednesday 23:00    -> overdue
+After pressing mark done -> done
+Next occurrence          -> pending again
+```
+
+If `overdue_time` is omitted, it defaults to `due_time`, preserving strict-deadline behaviour.
+
+For now, `overdue_time` must be equal to or later than `due_time`; cross-midnight due windows are not supported yet.
+
+## Expected entities
+
+For `bins`, expect entities like:
 
 ```text
 sensor.bins_status
@@ -55,9 +92,9 @@ binary_sensor.bins_overdue
 button.bins_mark_done
 ```
 
-## Preferred NFC tag automation
+## NFC tag automation
 
-Completion should target the task's button entity.
+Recommended completion path:
 
 ```yaml
 alias: Mark bins done from NFC
@@ -70,10 +107,10 @@ action:
       entity_id: button.bins_mark_done
 ```
 
-## Preferred Zigbee button automation
+## Zigbee button automation
 
 ```yaml
-alias: Mark bins done from button
+alias: Mark bins done from Zigbee button
 trigger:
   - platform: state
     entity_id: sensor.bins_button_action
@@ -83,31 +120,6 @@ action:
     target:
       entity_id: button.bins_mark_done
 ```
-
-## Optional compatibility service/action
-
-If the integration keeps `tracked_tasks.mark_done`, prefer entity targeting:
-
-```yaml
-alias: Mark bins done through tracked_tasks compatibility action
-trigger:
-  - platform: tag
-    tag_id: YOUR_TAG_ID
-action:
-  - service: tracked_tasks.mark_done
-    target:
-      entity_id: button.bins_mark_done
-```
-
-Avoid documenting this as the main path:
-
-```yaml
-service: tracked_tasks.mark_done
-data:
-  task_id: bins
-```
-
-That shape can remain for backwards compatibility only, if it already exists.
 
 ## Dashboard button
 
@@ -120,11 +132,30 @@ entities:
   - entity: sensor.bins_time_remaining
   - entity: sensor.bins_next_due
   - entity: sensor.bins_last_completed
+  - entity: binary_sensor.bins_due
   - entity: binary_sensor.bins_overdue
   - entity: button.bins_mark_done
 ```
 
-## Notification automation
+## Gentle due reminder automation
+
+Use the due sensor for softer reminders once the active window starts.
+
+```yaml
+alias: Gentle bins reminder
+trigger:
+  - platform: state
+    entity_id: binary_sensor.bins_due
+    to: "on"
+action:
+  - service: notify.mobile_app_your_phone
+    data:
+      message: "Bins are due this evening."
+```
+
+## Overdue notification automation
+
+Use the overdue sensor for stronger reminders once the acceptable deadline has passed.
 
 ```yaml
 alias: Notify when bins overdue
@@ -138,7 +169,7 @@ action:
       message: "Bins have not been done yet."
 ```
 
-## Escalating reminder example
+## Escalating overdue reminder example
 
 This is intentionally outside the integration. The integration exposes state; normal Home Assistant automations decide what to do with that state.
 
@@ -162,4 +193,14 @@ action:
   - service: notify.mobile_app_your_phone
     data:
       message: "Bins are still overdue."
+```
+
+## Optional compatibility service
+
+If the integration keeps a `tracked_tasks.mark_done` service, treat it as secondary/compatibility behaviour. The recommended public automation path is still `button.press`.
+
+```yaml
+service: tracked_tasks.mark_done
+target:
+  entity_id: button.bins_mark_done
 ```
