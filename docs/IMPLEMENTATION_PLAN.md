@@ -174,15 +174,17 @@ Goal: Completion state survives Home Assistant restarts.
 Tasks:
 
 - Persist task state using Home Assistant-native storage.
-- Restore state on setup.
+- Restore state on setup before entities are created.
+- Persist `last_completed` and `completed_due_at` whenever a task is marked done.
 - Handle missing/corrupt stored state gracefully.
 
 Acceptance criteria:
 
 - Mark task done.
 - Restart Home Assistant.
-- `last_completed` remains correct.
-- Status remains correct after restart.
+- `sensor.<task>_last_completed` remains correct.
+- `sensor.<task>_status`, `binary_sensor.<task>_due`, and `binary_sensor.<task>_overdue` remain correct after restart.
+- Invalid stored data does not block Home Assistant startup.
 
 ## Stage 7 — Documentation and example automations
 

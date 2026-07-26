@@ -26,6 +26,7 @@ from .const import (
 )
 from .models import TaskConfig, TrackedTaskManager
 from .schedule import ScheduleError, normalize_schedule_config
+from .storage import TrackedTasksStorage
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -91,7 +92,13 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Tracked Tasks from a config entry."""
     task_configs = _parse_task_configs(entry.data[CONF_TASKS])
-    manager = TrackedTaskManager(task_configs)
+    storage = TrackedTasksStorage(hass)
+    initial_states = await storage.async_load(task_configs)
+    manager = TrackedTaskManager(
+        task_configs,
+        initial_states=initial_states,
+        storage=storage,
+    )
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = manager
 
     _LOGGER.info(
@@ -121,7 +128,7 @@ def _async_register_services(hass: HomeAssistant) -> None:
     async def async_handle_mark_done(call: ServiceCall) -> None:
         manager_task_pairs = _tasks_from_mark_done_call(hass, call)
         for manager, task_id in manager_task_pairs:
-            task = manager.async_mark_done(task_id)
+            task = await manager.async_mark_done(task_id)
             _LOGGER.info("Marked tracked task '%s' done", task.config.task_id)
 
     hass.services.async_register(

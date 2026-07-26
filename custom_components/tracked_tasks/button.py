@@ -37,4 +37,4 @@ class TrackedTaskMarkDoneButton(TrackedTaskEntity, ButtonEntity):
 
     async def async_press(self) -> None:
         """Mark the task done."""
-        self._manager.async_mark_done(self.task.config.task_id)
+        await self._manager.async_mark_done(self.task.config.task_id)

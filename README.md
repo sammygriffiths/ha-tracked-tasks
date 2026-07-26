@@ -2,7 +2,7 @@
 
 `tracked_tasks` is a custom Home Assistant integration for modelling household tasks as native Home Assistant devices and entities.
 
-The first implementation supports YAML-defined tasks, basic status and last-completed sensors, and one shared completion path through each task's mark-done button entity.
+The current implementation supports YAML-defined tasks, schedule-derived entities, persistent completion state, and one shared completion path through each task's mark-done button entity.
 
 ## Installation
 
@@ -14,7 +14,7 @@ custom_components/tracked_tasks/
 
 Then restart Home Assistant after adding your YAML configuration.
 
-This version reports `0.1.6` in `manifest.json`.
+This version reports `0.1.7` in `manifest.json`.
 
 ## Configuration
 
@@ -81,6 +81,17 @@ data:
 ```
 
 When a supported schedule exists, completion also records which scheduled obligation was completed internally. For example, if `bins` is due Wednesday at 20:00 and you press the button on Wednesday evening, that completion is associated with that Wednesday 20:00 obligation.
+
+## Persistence
+
+Completion state is saved with Home Assistant's native storage API under the `tracked_tasks` storage key.
+
+The stored payload is versioned and currently contains:
+
+- `last_completed`
+- `completed_due_at`
+
+This lets the integration restore the last completion timestamp and the completed scheduled obligation after Home Assistant restarts. Missing, empty, old, or malformed stored data is ignored so startup can continue with a fresh in-memory state for affected tasks.
 
 ## Schedule calculation
 
@@ -172,7 +183,7 @@ Current schedule semantics:
 
 Home Assistant entity behavior:
 
-- `sensor.<task>_status` uses schedule-derived status for supported daily/weekly tasks.
+- `sensor.<task>_status` uses schedule-derived status for supported schedule types.
 - `sensor.<task>_next_due` exposes the current or next due timestamp.
 - `sensor.<task>_time_remaining` exposes whole minutes remaining until due.
 - `binary_sensor.<task>_due` turns on during the due window while incomplete.
@@ -217,10 +228,10 @@ action:
 7. Confirm `binary_sensor.bins_due` is on only during the due window, and `binary_sensor.bins_overdue` is on only after the overdue deadline.
 8. Press `button.bins_mark_done` before, during, or after the window and confirm the task becomes `done`.
 9. Optionally call the compatibility action with `target.entity_id` or legacy `data.task_id` and confirm it updates the same sensors.
+10. Restart Home Assistant and confirm `sensor.bins_last_completed`, `sensor.bins_status`, `binary_sensor.bins_due`, and `binary_sensor.bins_overdue` still reflect the completed occurrence correctly.
 
 ## Known limitations
 
-- Completion state is in memory only and is lost on Home Assistant restart.
 - Full recurrence rules and daylight-saving edge cases are not implemented yet.
 - Cross-midnight windows such as `due_time: "23:00"` with `overdue_time: "01:00"` are rejected for now.
 - Interval-days schedules do not yet support an explicit start date.
@@ -230,6 +241,6 @@ action:
 
 Recommended next stages:
 
-1. Stage 6: add Home Assistant-native persistence for `last_completed` and `completed_due_at`.
+1. Stage 7: documentation polish and more example automations.
 2. Add explicit start dates for interval-days schedules if needed.
 3. Add cross-midnight due windows if needed.

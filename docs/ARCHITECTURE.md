@@ -296,12 +296,28 @@ A legacy `data.task_id` form is acceptable only for backwards compatibility and 
 
 The integration should not rely on Home Assistant helper entities as its internal state store.
 
-Persist task completion state using Home Assistant-native storage. In early development, in-memory state is acceptable only for proof of concept stages.
+Task completion state is persisted using Home Assistant's native storage API. The current storage key is `tracked_tasks`, with storage version `1`.
 
 Persist at least:
 
 - `last_completed`
 - `completed_due_at` or equivalent obligation identifier, if implemented
+
+Current payload shape:
+
+```json
+{
+  "version": 1,
+  "tasks": {
+    "bins": {
+      "last_completed": "2026-07-23T20:10:00+00:00",
+      "completed_due_at": "2026-07-23T20:00:00+00:00"
+    }
+  }
+}
+```
+
+Missing, empty, old, unknown, or malformed task entries should be ignored during restore so bad stored data does not prevent Home Assistant startup.
 
 ## Future ideas
 

@@ -140,6 +140,10 @@ entities:
   - entity: button.bins_mark_done
 ```
 
+## Persistence check
+
+After pressing `button.bins_mark_done`, restart Home Assistant. The integration restores `sensor.bins_last_completed` and the completed obligation timestamp from Home Assistant-native storage, so `sensor.bins_status`, `binary_sensor.bins_due`, and `binary_sensor.bins_overdue` should remain correct for the same occurrence.
+
 ## Gentle due reminder automation
 
 Use the due sensor for softer reminders once the active window starts.

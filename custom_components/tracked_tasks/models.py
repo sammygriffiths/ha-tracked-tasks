@@ -5,7 +5,8 @@ from __future__ import annotations
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+import logging
+from typing import Any, Protocol
 
 from .const import STATUS_DONE, STATUS_PENDING
 from .schedule import (
@@ -14,6 +15,8 @@ from .schedule import (
     evaluate_schedule,
     get_current_obligation_due_at,
 )
+
+_LOGGER = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True, slots=True)
@@ -29,7 +32,7 @@ class TaskConfig:
 class TaskState:
     """Runtime state for one tracked task.
 
-    Persistence is intentionally deferred until the next implementation stage.
+    This state is restored from Home Assistant storage during integration setup.
     """
 
     last_completed: datetime | None = None
@@ -49,12 +52,29 @@ class TrackedTask:
     state: TaskState = field(default_factory=TaskState)
 
 
+class TaskStateStorage(Protocol):
+    """Persistence boundary used by the task manager."""
+
+    async def async_save(self, tasks: Mapping[str, TrackedTask]) -> None:
+        """Save task state."""
+
+
 class TrackedTaskManager:
     """Own task state and notify entities when task state changes."""
 
-    def __init__(self, tasks: Mapping[str, TaskConfig]) -> None:
+    def __init__(
+        self,
+        tasks: Mapping[str, TaskConfig],
+        initial_states: Mapping[str, TaskState] | None = None,
+        storage: TaskStateStorage | None = None,
+    ) -> None:
+        initial_states = initial_states or {}
+        self._storage = storage
         self.tasks: dict[str, TrackedTask] = {
-            task_id: TrackedTask(config=task_config)
+            task_id: TrackedTask(
+                config=task_config,
+                state=initial_states.get(task_id, TaskState()),
+            )
             for task_id, task_config in tasks.items()
         }
         self._listeners: set[Callable[[], None]] = set()
@@ -87,7 +107,7 @@ class TrackedTaskManager:
 
         return remove_listener
 
-    def async_mark_done(self, task_id: str) -> TrackedTask:
+    async def async_mark_done(self, task_id: str) -> TrackedTask:
         """Mark a task done and notify subscribers."""
         task = self.tasks[task_id]
         completed_at = datetime.now(timezone.utc)
@@ -101,6 +121,12 @@ class TrackedTaskManager:
         except ScheduleError:
             task.state.completed_due_at = None
         self._notify_listeners()
+        if self._storage is not None:
+            try:
+                await self._storage.async_save(self.tasks)
+            except Exception:
+                _LOGGER.exception("Failed to persist tracked task state")
+                raise
         return task
 
     def _notify_listeners(self) -> None:
