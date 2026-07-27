@@ -12,13 +12,21 @@ Copy this folder into your Home Assistant configuration directory:
 custom_components/tracked_tasks/
 ```
 
-Then restart Home Assistant after adding your YAML configuration.
+Then add your YAML configuration and restart Home Assistant.
 
-This version reports `0.1.7` in `manifest.json`.
+This version reports `0.1.9` in `manifest.json`.
+
+## Quick start
+
+1. Copy `custom_components/tracked_tasks/` into `/config/custom_components/tracked_tasks/`.
+2. Add a `tracked_tasks:` block to `/config/configuration.yaml`.
+3. Restart Home Assistant.
+4. Open Settings -> Devices & services -> Devices and look for one device per configured task.
+5. Press `button.<task>_mark_done` or call `button.press` against it from an automation.
 
 ## Configuration
 
-Add tasks to `configuration.yaml`:
+Minimal weekly task:
 
 ```yaml
 tracked_tasks:
@@ -33,6 +41,13 @@ tracked_tasks:
 ```
 
 Daily, weekly, monthly, interval-days, and one-off schedules are evaluated by pure Python schedule logic and exposed through Home Assistant entities.
+
+Times such as `due_time: "20:00"` and `overdue_time: "23:00"` are interpreted in Home Assistant's configured local timezone. In the UK, that means `20:00` remains 20:00 local time during BST and GMT.
+
+More complete examples are available in:
+
+- [examples/configuration.yaml](examples/configuration.yaml)
+- [docs/CONFIG_EXAMPLES.md](docs/CONFIG_EXAMPLES.md)
 
 ## Entities
 
@@ -141,6 +156,8 @@ schedule:
 
 For one-off schedules, `due_at` starts the active/reminder window and optional `overdue_at` starts the final overdue state. If `overdue_at` is omitted, it defaults to `due_at`, preserving strict-deadline behavior.
 
+For one-off schedules without an explicit timezone offset, `due_at` and `overdue_at` are interpreted in Home Assistant's local timezone.
+
 Strict behavior:
 
 ```yaml
@@ -217,6 +234,55 @@ action:
       entity_id: button.bins_mark_done
 ```
 
+## Due reminder automation example
+
+```yaml
+alias: Gentle bins reminder
+trigger:
+  - platform: state
+    entity_id: binary_sensor.bins_due
+    to: "on"
+action:
+  - service: notify.mobile_app_your_phone
+    data:
+      message: "Bins are due this evening."
+```
+
+## Overdue notification automation example
+
+```yaml
+alias: Notify when bins overdue
+trigger:
+  - platform: state
+    entity_id: binary_sensor.bins_overdue
+    to: "on"
+action:
+  - service: notify.mobile_app_your_phone
+    data:
+      message: "Bins have not been done yet."
+```
+
+More automation examples are available in [examples/automations.yaml](examples/automations.yaml).
+
+## Dashboard example
+
+Use a normal Home Assistant entities card:
+
+```yaml
+type: entities
+title: Bins
+entities:
+  - entity: sensor.bins_status
+  - entity: sensor.bins_time_remaining
+  - entity: sensor.bins_next_due
+  - entity: sensor.bins_last_completed
+  - entity: binary_sensor.bins_due
+  - entity: binary_sensor.bins_overdue
+  - entity: button.bins_mark_done
+```
+
+The same example is available in [examples/dashboard.yaml](examples/dashboard.yaml).
+
 ## Manual testing
 
 1. Install the integration folder and add a `bins` task to `configuration.yaml`.
@@ -230,6 +296,14 @@ action:
 9. Optionally call the compatibility action with `target.entity_id` or legacy `data.task_id` and confirm it updates the same sensors.
 10. Restart Home Assistant and confirm `sensor.bins_last_completed`, `sensor.bins_status`, `binary_sensor.bins_due`, and `binary_sensor.bins_overdue` still reflect the completed occurrence correctly.
 
+## Troubleshooting
+
+- If tasks do not appear, check Home Assistant logs for `tracked_tasks` config validation errors.
+- If entities have old names such as `sensor.last_completed`, remove the stale tracked task entities from Settings -> Devices & services -> Entities, remove any stale imported `Tracked Tasks` integration entry, then restart Home Assistant.
+- If a task never reaches `due`, check that `due_time`, `overdue_time`, and Home Assistant's timezone match your expectation.
+- If a completion was persisted before version `0.1.9`, press the task's mark-done button once after upgrading if its restored status looks wrong. Earlier versions calculated obligations in UTC.
+- If Home Assistant reports invalid YAML, start with the minimal weekly example above and add other tasks one at a time.
+
 ## Known limitations
 
 - Full recurrence rules and daylight-saving edge cases are not implemented yet.
@@ -241,6 +315,6 @@ action:
 
 Recommended next stages:
 
-1. Stage 7: documentation polish and more example automations.
+1. Stage 8: optional future polish such as config flow, options flow, enable/disable controls, Todoist sync, HACS packaging, or brand images.
 2. Add explicit start dates for interval-days schedules if needed.
 3. Add cross-midnight due windows if needed.

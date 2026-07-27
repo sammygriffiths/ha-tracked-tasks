@@ -12,6 +12,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.typing import ConfigType
+from homeassistant.util import dt as dt_util
 
 from .const import (
     ATTR_ENTITY_ID,
@@ -98,6 +99,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         task_configs,
         initial_states=initial_states,
         storage=storage,
+        now_provider=dt_util.now,
     )
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = manager
 

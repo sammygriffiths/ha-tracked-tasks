@@ -1,0 +1,12 @@
+# Example Lovelace entities card.
+
+type: entities
+title: Bins
+entities:
+  - entity: sensor.bins_status
+  - entity: sensor.bins_time_remaining
+  - entity: sensor.bins_next_due
+  - entity: sensor.bins_last_completed
+  - entity: binary_sensor.bins_due
+  - entity: binary_sensor.bins_overdue
+  - entity: button.bins_mark_done

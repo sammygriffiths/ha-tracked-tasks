@@ -200,6 +200,13 @@ Add/update:
 - example overdue notification automation
 - known limitations
 
+Acceptance criteria:
+
+- README includes install, configuration, entities, completion, schedules, persistence, manual testing, troubleshooting, known limitations, and roadmap sections.
+- Copy-pasteable examples exist for configuration, automations, and a basic Lovelace card.
+- Documentation presents `button.press` as the canonical completion path.
+- `tracked_tasks.mark_done` is documented only as compatibility behaviour.
+
 ## Stage 8 — Optional future polish
 
 Only after the above works:

@@ -1,0 +1,51 @@
+# Example tracked_tasks configuration.yaml block.
+#
+# Copy the tracked_tasks section into your Home Assistant configuration.yaml,
+# then restart Home Assistant.
+
+tracked_tasks:
+  tasks:
+    bins:
+      name: Bins
+      schedule:
+        type: weekly
+        weekday: wednesday
+        due_time: "20:00"
+        overdue_time: "23:00"
+
+    morning_medication:
+      name: Morning Medication
+      schedule:
+        type: daily
+        due_time: "09:30"
+        overdue_time: "10:00"
+
+    dishwasher_salt:
+      name: Dishwasher Salt
+      schedule:
+        type: monthly
+        day: 1
+        due_time: "18:00"
+        overdue_time: "22:00"
+
+    change_filter:
+      name: Change Filter
+      schedule:
+        type: interval_days
+        every: 30
+        due_time: "12:00"
+        overdue_time: "20:00"
+
+    rsvp_deadline:
+      name: RSVP Deadline
+      schedule:
+        type: one_off
+        due_at: "2027-01-17T18:00:00"
+        overdue_at: "2027-01-17T21:00:00"
+
+    strict_task_example:
+      name: Strict Task Example
+      schedule:
+        type: daily
+        due_time: "09:00"
+        # overdue_time omitted, so overdue_time defaults to due_time.

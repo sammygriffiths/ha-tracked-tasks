@@ -18,6 +18,8 @@ from .schedule import (
 
 _LOGGER = logging.getLogger(__name__)
 
+NowProvider = Callable[[], datetime]
+
 
 @dataclass(frozen=True, slots=True)
 class TaskConfig:
@@ -67,9 +69,11 @@ class TrackedTaskManager:
         tasks: Mapping[str, TaskConfig],
         initial_states: Mapping[str, TaskState] | None = None,
         storage: TaskStateStorage | None = None,
+        now_provider: NowProvider | None = None,
     ) -> None:
         initial_states = initial_states or {}
         self._storage = storage
+        self._now = now_provider or (lambda: datetime.now(timezone.utc))
         self.tasks: dict[str, TrackedTask] = {
             task_id: TrackedTask(
                 config=task_config,
@@ -93,7 +97,7 @@ class TrackedTaskManager:
             return evaluate_schedule(
                 task.config.schedule,
                 task.state,
-                now or datetime.now(timezone.utc),
+                now or self._now(),
             )
         except ScheduleError:
             return None
@@ -110,7 +114,7 @@ class TrackedTaskManager:
     async def async_mark_done(self, task_id: str) -> TrackedTask:
         """Mark a task done and notify subscribers."""
         task = self.tasks[task_id]
-        completed_at = datetime.now(timezone.utc)
+        completed_at = self._now()
         task.state.last_completed = completed_at
         try:
             task.state.completed_due_at = get_current_obligation_due_at(

@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 import unittest
+from zoneinfo import ZoneInfo
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -153,6 +154,21 @@ class TestDailySchedule(unittest.TestCase):
                 State(),
                 datetime(2026, 7, 20, 18, 0, tzinfo=UTC),
             )
+
+    def test_daily_due_time_uses_now_timezone(self) -> None:
+        london = ZoneInfo("Europe/London")
+        now = datetime(2026, 7, 20, 19, 30, tzinfo=london)
+
+        result = schedule.evaluate_schedule(
+            {"type": "daily", "due_time": "20:00", "overdue_time": "23:00"},
+            State(),
+            now,
+        )
+
+        self.assertEqual(result.status, "pending")
+        self.assertEqual(result.due_at.hour, 20)
+        self.assertEqual(result.due_at.tzinfo, london)
+        self.assertEqual(result.due_at.utcoffset(), timedelta(hours=1))
 
 
 class TestWeeklySchedule(unittest.TestCase):

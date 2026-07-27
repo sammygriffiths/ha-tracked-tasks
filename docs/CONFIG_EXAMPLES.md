@@ -2,6 +2,8 @@
 
 ## Example YAML configuration
 
+The same configuration is available as a copy-paste file at [examples/configuration.yaml](../examples/configuration.yaml).
+
 ```yaml
 tracked_tasks:
   tasks:
@@ -79,6 +81,8 @@ If `overdue_time` is omitted, it defaults to `due_time`, preserving strict-deadl
 
 For one-off tasks, `due_at` starts the active/reminder window and optional `overdue_at` starts the final overdue state. If `overdue_at` is omitted, it defaults to `due_at`.
 
+Schedule times are local Home Assistant wall-clock times. For example, in the UK, `due_time: "20:00"` means 20:00 during both BST and GMT.
+
 For now, `overdue_time` must be equal to or later than `due_time`; cross-midnight due windows are not supported yet.
 
 ## Expected entities
@@ -96,6 +100,8 @@ button.bins_mark_done
 ```
 
 ## NFC tag automation
+
+These automation examples are also collected in [examples/automations.yaml](../examples/automations.yaml).
 
 Recommended completion path:
 
@@ -126,7 +132,7 @@ action:
 
 ## Dashboard button
 
-The integration should expose `button.<task>_mark_done`, so a normal entities card can be used:
+The integration exposes `button.<task>_mark_done`, so a normal entities card can be used. This example is also available in [examples/dashboard.yaml](../examples/dashboard.yaml).
 
 ```yaml
 type: entities
@@ -204,7 +210,7 @@ action:
 
 ## Optional compatibility service
 
-If the integration keeps a `tracked_tasks.mark_done` service, treat it as secondary/compatibility behaviour. The recommended public automation path is still `button.press`.
+`tracked_tasks.mark_done` is secondary compatibility behaviour. The recommended public automation path is still `button.press`.
 
 ```yaml
 service: tracked_tasks.mark_done

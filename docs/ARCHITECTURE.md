@@ -105,6 +105,8 @@ class ScheduleConfig:
 
 If `overdue_time` is omitted, it should be normalised to `due_time` for schedule types that use `due_time`.
 
+Schedules should be evaluated using Home Assistant's configured local timezone. A YAML value such as `due_time: "20:00"` means 20:00 local wall-clock time, including daylight-saving changes such as BST/GMT.
+
 ### Task state
 
 Task state describes what has happened.
@@ -243,6 +245,8 @@ schedule:
 ```
 
 For one-off schedules, `due_at` starts the active/reminder window and optional `overdue_at` starts the final overdue state. If `overdue_at` is omitted, it defaults to `due_at`, preserving strict-deadline behaviour.
+
+If a one-off `due_at` or `overdue_at` value does not include a timezone offset, it is interpreted in Home Assistant's local timezone.
 
 Monthly schedules clamp days that do not exist in a shorter month to that month's final day. Interval-days schedules use the last completed obligation as their anchor once completed; before first completion, the initial occurrence is based on today's `due_time`.
 
