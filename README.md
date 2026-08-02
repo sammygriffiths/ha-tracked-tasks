@@ -14,7 +14,7 @@ custom_components/tracked_tasks/
 
 Then add your YAML configuration and restart Home Assistant.
 
-This version reports `0.1.9` in `manifest.json`.
+This version reports `0.1.10` in `manifest.json`.
 
 ## Quick start
 
@@ -191,6 +191,7 @@ Current schedule semantics:
 - Before the due timestamp, an incomplete task is `pending`.
 - From the due timestamp until the overdue timestamp, an incomplete task is `due`.
 - At or after the overdue timestamp, an incomplete task is `overdue`.
+- An incomplete overdue occurrence stays `overdue` until the next occurrence reaches its own due timestamp.
 - If `completed_due_at` matches the current obligation due timestamp, the task is `done` and `due_at` advances to the next occurrence.
 - `overdue_time` must be equal to or later than `due_time`; cross-midnight due windows are not supported yet.
 - `time_remaining` counts down to `due_at` and is zero once due or overdue.
@@ -302,6 +303,7 @@ The same example is available in [examples/dashboard.yaml](examples/dashboard.ya
 - If entities have old names such as `sensor.last_completed`, remove the stale tracked task entities from Settings -> Devices & services -> Entities, remove any stale imported `Tracked Tasks` integration entry, then restart Home Assistant.
 - If a task never reaches `due`, check that `due_time`, `overdue_time`, and Home Assistant's timezone match your expectation.
 - If a completion was persisted before version `0.1.9`, press the task's mark-done button once after upgrading if its restored status looks wrong. Earlier versions calculated obligations in UTC.
+- If a newly added recurring task appears overdue before its first upcoming due time, mark it done once or wait until the next due time. The integration treats an incomplete previous occurrence as still overdue until the next occurrence starts.
 - If Home Assistant reports invalid YAML, start with the minimal weekly example above and add other tasks one at a time.
 
 ## Known limitations

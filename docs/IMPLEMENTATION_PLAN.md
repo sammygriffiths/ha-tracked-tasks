@@ -153,6 +153,7 @@ tracked_tasks:
   - `done` when the current occurrence has been completed.
 - `binary_sensor.<task>_due` should be `on` only in the due window while incomplete.
 - `binary_sensor.<task>_overdue` should be `on` only after the overdue deadline while incomplete.
+- An overdue incomplete occurrence should stay overdue until the next occurrence reaches its due time.
 - Pressing `button.<task>_mark_done` before, during, or after the due window should mark the current occurrence done.
 
 ### Acceptance criteria

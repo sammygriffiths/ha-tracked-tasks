@@ -77,6 +77,8 @@ After pressing mark done -> done
 Next occurrence          -> pending again
 ```
 
+If a recurring occurrence is overdue and incomplete, it stays overdue until the next occurrence reaches its own due time. For example, a daily bedtime task that became overdue at 23:00 remains overdue after midnight, then the next day's occurrence takes over at the next `due_time`.
+
 If `overdue_time` is omitted, it defaults to `due_time`, preserving strict-deadline behaviour.
 
 For one-off tasks, `due_at` starts the active/reminder window and optional `overdue_at` starts the final overdue state. If `overdue_at` is omitted, it defaults to `due_at`.

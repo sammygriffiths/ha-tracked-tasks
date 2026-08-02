@@ -36,10 +36,14 @@ class TestDailySchedule(unittest.TestCase):
 
     def test_daily_pending_before_due_time(self) -> None:
         now = datetime(2026, 7, 20, 8, 30, tzinfo=UTC)
+        previous_due_at = datetime(2026, 7, 19, 9, 0, tzinfo=UTC)
 
         result = schedule.evaluate_schedule(
             {"type": "daily", "due_time": "09:00", "overdue_time": "10:00"},
-            State(),
+            State(
+                last_completed=datetime(2026, 7, 19, 9, 15, tzinfo=UTC),
+                completed_due_at=previous_due_at,
+            ),
             now,
         )
 
@@ -50,6 +54,33 @@ class TestDailySchedule(unittest.TestCase):
         self.assertFalse(result.overdue)
         self.assertEqual(result.time_remaining, timedelta(minutes=30))
         self.assertFalse(result.current_obligation_completed)
+
+    def test_daily_overdue_carries_until_next_due_time(self) -> None:
+        now = datetime(2026, 7, 21, 0, 30, tzinfo=UTC)
+
+        result = schedule.evaluate_schedule(
+            {"type": "daily", "due_time": "22:00", "overdue_time": "23:00"},
+            State(),
+            now,
+        )
+
+        self.assertEqual(result.status, "overdue")
+        self.assertEqual(result.due_at, datetime(2026, 7, 20, 22, 0, tzinfo=UTC))
+        self.assertEqual(result.overdue_at, datetime(2026, 7, 20, 23, 0, tzinfo=UTC))
+        self.assertTrue(result.overdue)
+
+    def test_daily_carried_overdue_resets_when_next_due_time_arrives(self) -> None:
+        now = datetime(2026, 7, 21, 22, 0, tzinfo=UTC)
+
+        result = schedule.evaluate_schedule(
+            {"type": "daily", "due_time": "22:00", "overdue_time": "23:00"},
+            State(),
+            now,
+        )
+
+        self.assertEqual(result.status, "due")
+        self.assertEqual(result.due_at, datetime(2026, 7, 21, 22, 0, tzinfo=UTC))
+        self.assertFalse(result.overdue)
 
     def test_daily_due_between_due_and_overdue_times(self) -> None:
         now = datetime(2026, 7, 20, 9, 30, tzinfo=UTC)
@@ -158,10 +189,14 @@ class TestDailySchedule(unittest.TestCase):
     def test_daily_due_time_uses_now_timezone(self) -> None:
         london = ZoneInfo("Europe/London")
         now = datetime(2026, 7, 20, 19, 30, tzinfo=london)
+        previous_due_at = datetime(2026, 7, 19, 20, 0, tzinfo=london)
 
         result = schedule.evaluate_schedule(
             {"type": "daily", "due_time": "20:00", "overdue_time": "23:00"},
-            State(),
+            State(
+                last_completed=datetime(2026, 7, 19, 20, 15, tzinfo=london),
+                completed_due_at=previous_due_at,
+            ),
             now,
         )
 
@@ -176,6 +211,29 @@ class TestWeeklySchedule(unittest.TestCase):
 
     def test_weekly_pending_before_due_day(self) -> None:
         now = datetime(2026, 7, 20, 8, 0, tzinfo=UTC)  # Monday
+        previous_due_at = datetime(2026, 7, 16, 9, 0, tzinfo=UTC)
+
+        result = schedule.evaluate_schedule(
+            {
+                "type": "weekly",
+                "weekday": "thursday",
+                "due_time": "09:00",
+                "overdue_time": "12:00",
+            },
+            State(
+                last_completed=datetime(2026, 7, 16, 9, 15, tzinfo=UTC),
+                completed_due_at=previous_due_at,
+            ),
+            now,
+        )
+
+        self.assertEqual(result.status, "pending")
+        self.assertEqual(result.due_at, datetime(2026, 7, 23, 9, 0, tzinfo=UTC))
+        self.assertEqual(result.overdue_at, datetime(2026, 7, 23, 12, 0, tzinfo=UTC))
+        self.assertEqual(result.time_remaining, timedelta(days=3, hours=1))
+
+    def test_weekly_overdue_carries_until_next_due_day(self) -> None:
+        now = datetime(2026, 7, 20, 8, 0, tzinfo=UTC)  # Monday
 
         result = schedule.evaluate_schedule(
             {
@@ -188,10 +246,9 @@ class TestWeeklySchedule(unittest.TestCase):
             now,
         )
 
-        self.assertEqual(result.status, "pending")
-        self.assertEqual(result.due_at, datetime(2026, 7, 23, 9, 0, tzinfo=UTC))
-        self.assertEqual(result.overdue_at, datetime(2026, 7, 23, 12, 0, tzinfo=UTC))
-        self.assertEqual(result.time_remaining, timedelta(days=3, hours=1))
+        self.assertEqual(result.status, "overdue")
+        self.assertEqual(result.due_at, datetime(2026, 7, 16, 9, 0, tzinfo=UTC))
+        self.assertTrue(result.overdue)
 
     def test_weekly_due_between_due_and_overdue_times(self) -> None:
         now = datetime(2026, 7, 23, 10, 0, tzinfo=UTC)  # Thursday
@@ -371,6 +428,7 @@ class TestMonthlySchedule(unittest.TestCase):
 
     def test_monthly_day_clamps_to_end_of_short_month(self) -> None:
         now = datetime(2027, 2, 27, 12, 0, tzinfo=UTC)
+        previous_due_at = datetime(2027, 1, 31, 18, 0, tzinfo=UTC)
 
         result = schedule.evaluate_schedule(
             {
@@ -379,7 +437,10 @@ class TestMonthlySchedule(unittest.TestCase):
                 "due_time": "18:00",
                 "overdue_time": "22:00",
             },
-            State(),
+            State(
+                last_completed=datetime(2027, 1, 31, 18, 30, tzinfo=UTC),
+                completed_due_at=previous_due_at,
+            ),
             now,
         )
 

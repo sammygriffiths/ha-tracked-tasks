@@ -138,7 +138,11 @@ def get_current_obligation_due_at(
         due_time = _parse_due_time(schedule)
         today_due = _combine(now.date(), due_time, now)
         if now < today_due:
-            return today_due
+            return _select_between_previous_and_upcoming_due(
+                today_due - timedelta(days=1),
+                today_due,
+                state,
+            )
         return today_due
 
     if schedule_type == SCHEDULE_WEEKLY:
@@ -154,24 +158,44 @@ def get_current_obligation_due_at(
         )
 
         if days_until_due < days_since_due:
-            return upcoming_due
+            return _select_between_previous_and_upcoming_due(
+                previous_due,
+                upcoming_due,
+                state,
+            )
         if days_until_due == days_since_due and now < upcoming_due:
-            return upcoming_due
+            return _select_between_previous_and_upcoming_due(
+                previous_due,
+                upcoming_due,
+                state,
+            )
         return previous_due
 
     if schedule_type == SCHEDULE_MONTHLY:
         due_time = _parse_due_time(schedule)
         day = _parse_month_day(schedule)
         due_at = _combine(_monthly_due_date(now.year, now.month, day), due_time, now)
+        if now < due_at:
+            return _select_between_previous_and_upcoming_due(
+                _previous_monthly_due_at(due_at, day),
+                due_at,
+                state,
+            )
         return due_at
 
     if schedule_type == SCHEDULE_INTERVAL_DAYS:
         due_time = _parse_due_time(schedule)
         every = _parse_every_days(schedule)
         if state is not None and state.completed_due_at is not None:
-            return state.completed_due_at + timedelta(days=every)
+            due_at = state.completed_due_at + timedelta(days=every)
+            while now >= due_at + timedelta(days=every):
+                due_at += timedelta(days=every)
+            return due_at
 
-        return _combine(now.date(), due_time, now)
+        today_due = _combine(now.date(), due_time, now)
+        if now < today_due:
+            return today_due - timedelta(days=every)
+        return today_due
 
     if schedule_type == SCHEDULE_ONE_OFF:
         return _parse_due_at(schedule, now)
@@ -236,6 +260,20 @@ def get_next_obligation_due_at(
         return due_at
 
     raise ScheduleError(f"Unsupported schedule type: {schedule_type!r}")
+
+
+def _select_between_previous_and_upcoming_due(
+    previous_due_at: datetime,
+    upcoming_due_at: datetime,
+    state: TaskStateLike | None,
+) -> datetime:
+    """Return previous incomplete due or upcoming due before the upcoming window."""
+    if state is not None and state.completed_due_at == previous_due_at:
+        return upcoming_due_at
+    if state is not None and state.completed_due_at == upcoming_due_at:
+        return upcoming_due_at
+
+    return previous_due_at
 
 
 def get_overdue_at(
@@ -350,6 +388,16 @@ def _parse_overdue_at(schedule: Mapping[str, Any], due_at: datetime) -> datetime
 def _monthly_due_date(year: int, month: int, day: int) -> date:
     last_day = calendar.monthrange(year, month)[1]
     return date(year, month, min(day, last_day))
+
+
+def _previous_monthly_due_at(due_at: datetime, day: int) -> datetime:
+    year = due_at.year
+    month = due_at.month - 1
+    if month < 1:
+        year -= 1
+        month = 12
+
+    return _combine(_monthly_due_date(year, month, day), due_at.time(), due_at)
 
 
 def _combine(day: date, due_time: time, now: datetime) -> datetime:

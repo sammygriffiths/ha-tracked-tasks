@@ -155,6 +155,8 @@ After Wednesday 23:00    -> overdue
 After pressing mark done -> done for the current occurrence
 ```
 
+If an occurrence becomes overdue and is not completed, it remains the current overdue occurrence until the next scheduled occurrence reaches its own due time. This prevents daily tasks from dropping back to `pending` at midnight simply because the date changed.
+
 If `overdue_time` is omitted, the integration should default it to `due_time`, preserving previous strict-deadline behaviour:
 
 ```yaml
